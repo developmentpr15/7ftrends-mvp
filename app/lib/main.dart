@@ -67,6 +67,7 @@ class SevenFTrendsApp extends StatelessWidget {
 // --- MODELS ---
 
 class UserProfile {
+  final String userId; // Added userId
   final String email;
   final String username;
   final String displayName;
@@ -74,6 +75,7 @@ class UserProfile {
   final String avatarUrl;
 
   UserProfile({
+    required this.userId, // Added userId
     required this.email,
     required this.username,
     required this.displayName,
@@ -94,6 +96,7 @@ class UserProfile {
   }
 
   UserProfile copyWith({
+    String? userId, // Added userId
     String? email,
     String? username,
     String? displayName,
@@ -101,6 +104,7 @@ class UserProfile {
     String? avatarUrl,
   }) {
     return UserProfile(
+      userId: userId ?? this.userId, // Added userId
       email: email ?? this.email,
       username: username ?? this.username,
       displayName: displayName ?? this.displayName,
@@ -110,6 +114,7 @@ class UserProfile {
   }
 
   Map<String, dynamic> toJson() => {
+        'userId': userId, // Added userId
         'email': email,
         'username': username,
         'displayName': displayName,
@@ -118,6 +123,7 @@ class UserProfile {
       };
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
+        userId: json['userId'] ?? '', // Added userId
         email: json['email'] ?? '',
         username: json['username'] ?? '',
         displayName: json['displayName'] ?? '',
@@ -198,6 +204,122 @@ class ClosetCategory {
   const ClosetCategory(this.name, this.icon);
 }
 
+class FeedPost {
+  final String id;
+  final String userId;
+  final String username;
+  final String userAvatarUrl;
+  final String imageData; // base64 string
+  final String caption;
+  final List<String> hashtags;
+  final int likes;
+  final bool likedByMe;
+  final DateTime createdAt;
+  final String? closetItemId; // optional
+
+  FeedPost({
+    required this.id,
+    required this.userId,
+    required this.username,
+    required this.userAvatarUrl,
+    required this.imageData,
+    required this.caption,
+    required this.hashtags,
+    required this.likes,
+    required this.likedByMe,
+    required this.createdAt,
+    this.closetItemId,
+  });
+
+  FeedPost copyWith({
+    String? id,
+    String? userId,
+    String? username,
+    String? userAvatarUrl,
+    String? imageData,
+    String? caption,
+    List<String>? hashtags,
+    int? likes,
+    bool? likedByMe,
+    DateTime? createdAt,
+    String? closetItemId,
+  }) {
+    return FeedPost(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      username: username ?? this.username,
+      userAvatarUrl: userAvatarUrl ?? this.userAvatarUrl,
+      imageData: imageData ?? this.imageData,
+      caption: caption ?? this.caption,
+      hashtags: hashtags ?? this.hashtags,
+      likes: likes ?? this.likes,
+      likedByMe: likedByMe ?? this.likedByMe,
+      createdAt: createdAt ?? this.createdAt,
+      closetItemId: closetItemId ?? this.closetItemId,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'userId': userId,
+        'username': username,
+        'userAvatarUrl': userAvatarUrl,
+        'imageData': imageData,
+        'caption': caption,
+        'hashtags': hashtags,
+        'likes': likes,
+        'likedByMe': likedByMe,
+        'createdAt': createdAt.toIso8601String(),
+        'closetItemId': closetItemId,
+      };
+
+  factory FeedPost.fromJson(Map<String, dynamic> json) => FeedPost(
+        id: json['id'],
+        userId: json['userId'],
+        username: json['username'],
+        userAvatarUrl: json['userAvatarUrl'] ?? '',
+        imageData: json['imageData'],
+        caption: json['caption'],
+        hashtags: (json['hashtags'] as List).map((e) => e.toString()).toList(),
+        likes: json['likes'],
+        likedByMe: json['likedByMe'],
+        createdAt: DateTime.parse(json['createdAt']),
+        closetItemId: json['closetItemId'],
+      );
+}
+
+class Comment {
+  final String id;
+  final String postId;
+  final String userId;
+  final String text;
+  final DateTime createdAt;
+
+  Comment({
+    required this.id,
+    required this.postId,
+    required this.userId,
+    required this.text,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'postId': postId,
+        'userId': userId,
+        'text': text,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory Comment.fromJson(Map<String, dynamic> json) => Comment(
+        id: json['id'],
+        postId: json['postId'],
+        userId: json['userId'],
+        text: json['text'],
+        createdAt: DateTime.parse(json['createdAt']),
+      );
+}
+
 // --- SERVICES ---
 
 class LocalSessionService {
@@ -263,6 +385,32 @@ class LocalClosetService {
   }
 }
 
+class LocalFeedService {
+  static const _feedKey = 'feed_posts';
+
+  Future<List<FeedPost>> loadFeedPosts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_feedKey);
+    if (jsonStr == null) return [];
+    try {
+      final list = jsonDecode(jsonStr) as List;
+      return list.map((e) => FeedPost.fromJson(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveFeedPosts(List<FeedPost> posts) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_feedKey, jsonEncode(posts.map((e) => e.toJson()).toList()));
+  }
+
+  Future<void> clearFeedPosts() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_feedKey);
+  }
+}
+
 // --- PROVIDERS ---
 
 class AuthProvider extends ChangeNotifier {
@@ -294,6 +442,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     await Future.delayed(const Duration(seconds: 1));
     _profile = UserProfile(
+      userId: UniqueKey().toString(), // Generate unique ID for new user
       email: email,
       username: email.split('@')[0],
       displayName: '',
@@ -311,6 +460,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     await Future.delayed(const Duration(seconds: 1));
     _profile = UserProfile(
+      userId: UniqueKey().toString(), // Generate unique ID for new user
       email: email,
       username: username,
       displayName: '',
@@ -465,6 +615,183 @@ class ClosetProvider extends ChangeNotifier {
   }
 }
 
+class FeedProvider extends ChangeNotifier {
+  final LocalFeedService _service = LocalFeedService();
+  List<FeedPost> _posts = [];
+  bool _isLoading = false;
+  String _searchQuery = '';
+
+  List<FeedPost> get posts => _filteredPosts();
+  bool get isLoading => _isLoading;
+  String get searchQuery => _searchQuery;
+
+  FeedProvider() {
+    _loadPosts();
+  }
+
+  Future<void> _loadPosts() async {
+    _isLoading = true;
+    notifyListeners();
+    _posts = await _service.loadFeedPosts();
+    if (_posts.isEmpty) {
+      _posts = _mockFeedData();
+      await _service.saveFeedPosts(_posts);
+    }
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  List<FeedPost> _filteredPosts() {
+    if (_searchQuery.isEmpty) return _posts;
+    final query = _searchQuery.toLowerCase();
+    return _posts.where((post) {
+      return post.caption.toLowerCase().contains(query) ||
+             post.hashtags.any((tag) => tag.toLowerCase().contains(query)) ||
+             post.username.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  Future<void> addPost(FeedPost post) async {
+    _posts.insert(0, post);
+    notifyListeners();
+    await _service.saveFeedPosts(_posts);
+  }
+
+  Future<void> toggleLike(String postId, String userId) async {
+    final index = _posts.indexWhere((p) => p.id == postId);
+    if (index != -1) {
+      final post = _posts[index];
+      final liked = post.likedByMe;
+      _posts[index] = post.copyWith(
+        likes: liked ? post.likes - 1 : post.likes + 1,
+        likedByMe: !liked,
+      );
+      notifyListeners();
+      await _service.saveFeedPosts(_posts);
+    }
+  }
+
+  Future<void> deletePost(String postId) async {
+    _posts.removeWhere((p) => p.id == postId);
+    notifyListeners();
+    await _service.saveFeedPosts(_posts);
+  }
+
+  List<FeedPost> _mockFeedData() {
+    return [
+      FeedPost(
+        id: UniqueKey().toString(),
+        userId: 'user1',
+        username: 'fashionista_gal',
+        userAvatarUrl: 'https://picsum.photos/id/1005/50/50',
+        imageData: '', // Placeholder, will be replaced with actual base64
+        caption: 'Loving this new outfit! Perfect for a casual day out. #OOTD #casualstyle',
+        hashtags: ['OOTD', 'casualstyle'],
+        likes: 15,
+        likedByMe: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        closetItemId: null,
+      ),
+      FeedPost(
+        id: UniqueKey().toString(),
+        userId: 'user2',
+        username: 'style_guru',
+        userAvatarUrl: 'https://picsum.photos/id/1011/50/50',
+        imageData: '', // Placeholder
+        caption: 'My go-to formal look. This red dress is a must-have! #formalwear #reddress',
+        hashtags: ['formalwear', 'reddress'],
+        likes: 30,
+        likedByMe: true,
+        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+        closetItemId: null, // Assuming a red dress from closet
+      ),
+      FeedPost(
+        id: UniqueKey().toString(),
+        userId: 'user1',
+        username: 'fashionista_gal',
+        userAvatarUrl: 'https://picsum.photos/id/1005/50/50',
+        imageData: '', // Placeholder
+        caption: 'Street style vibes today. Comfort meets chic! #streetwear #fashion',
+        hashtags: ['streetwear', 'fashion'],
+        likes: 22,
+        likedByMe: false,
+        createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+        closetItemId: null,
+      ),
+      FeedPost(
+        id: UniqueKey().toString(),
+        userId: 'user3',
+        username: 'trendsetter',
+        userAvatarUrl: 'https://picsum.photos/id/1012/50/50',
+        imageData: '', // Placeholder
+        caption: 'New sneakers alert! So comfy and stylish. #sneakers #sporty',
+        hashtags: ['sneakers', 'sporty'],
+        likes: 45,
+        likedByMe: false,
+        createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        closetItemId: null,
+      ),
+      FeedPost(
+        id: UniqueKey().toString(),
+        userId: 'user2',
+        username: 'style_guru',
+        userAvatarUrl: 'https://picsum.photos/id/1011/50/50',
+        imageData: '', // Placeholder
+        caption: 'Accessorizing is key! Love this new watch. #accessories #style',
+        hashtags: ['accessories', 'style'],
+        likes: 10,
+        likedByMe: false,
+        createdAt: DateTime.now().subtract(const Duration(days: 2)),
+        closetItemId: null,
+      ),
+      FeedPost(
+        id: UniqueKey().toString(),
+        userId: 'user4',
+        username: 'minimalist_chic',
+        userAvatarUrl: 'https://picsum.photos/id/1015/50/50',
+        imageData: '', // Placeholder
+        caption: 'Keeping it simple and elegant with a classic white tee. #minimalist #classic',
+        hashtags: ['minimalist', 'classic'],
+        likes: 18,
+        likedByMe: true,
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        closetItemId: null,
+      ),
+      FeedPost(
+        id: UniqueKey().toString(),
+        userId: 'user1',
+        username: 'fashionista_gal',
+        userAvatarUrl: 'https://picsum.photos/id/1005/50/50',
+        imageData: '', // Placeholder
+        caption: 'Ready for autumn with this cozy outerwear. #autumnfashion #outerwear',
+        hashtags: ['autumnfashion', 'outerwear'],
+        likes: 25,
+        likedByMe: false,
+        createdAt: DateTime.now().subtract(const Duration(days: 4)),
+        closetItemId: null,
+      ),
+      FeedPost(
+        id: UniqueKey().toString(),
+        userId: 'user3',
+        username: 'trendsetter',
+        userAvatarUrl: 'https://picsum.photos/id/1012/50/50',
+        imageData: '', // Placeholder
+        caption: 'Experimenting with new color palettes. What do you think? #colorblock #fashiontips',
+        hashtags: ['colorblock', 'fashiontips'],
+        likes: 35,
+        likedByMe: false,
+        createdAt: DateTime.now().subtract(const Duration(days: 5)),
+        closetItemId: null,
+      ),
+    ];
+  }
+}
+
 // --- VALIDATION UTILS ---
 
 String? validateUsername(String? value, {Set<String>? takenUsernames}) {
@@ -498,6 +825,24 @@ String? validateItemName(String? value) {
 String? validateCategory(String? value) {
   if (value == null || value.trim().isEmpty) return 'Category required';
   if (!kCategories.any((c) => c.name == value)) return 'Invalid category';
+  return null;
+}
+
+String? validateCaption(String? value) {
+  if (value == null || value.trim().isEmpty) return 'Caption required';
+  if (value.length > 500) return 'Max 500 characters';
+  return null;
+}
+
+String? validateHashtags(String? value) {
+  if (value != null && value.isNotEmpty) {
+    final tags = value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    for (final tag in tags) {
+      if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(tag)) {
+        return 'Hashtags can only contain letters, numbers, and underscores.';
+      }
+    }
+  }
   return null;
 }
 
@@ -838,23 +1183,28 @@ class _HomeScaffoldState extends State<HomeScaffold> {
   bool _loadingTab = false;
   late LocalSessionService _session;
   late ClosetProvider _closet;
+  late FeedProvider _feed;
 
   @override
   void initState() {
     super.initState();
     _session = LocalSessionService();
     _closet = ClosetProvider();
+    _feed = FeedProvider();
     _loadLastTab();
     _closet.addListener(_onClosetChanged);
+    _feed.addListener(_onFeedChanged);
   }
 
   @override
   void dispose() {
     _closet.removeListener(_onClosetChanged);
+    _feed.removeListener(_onFeedChanged);
     super.dispose();
   }
 
   void _onClosetChanged() => setState(() {});
+  void _onFeedChanged() => setState(() {});
 
   Future<void> _loadLastTab() async {
     final idx = await _session.loadLastTabIndex();
@@ -913,9 +1263,13 @@ class _HomeScaffoldState extends State<HomeScaffold> {
           : IndexedStack(
               index: _tabIndex,
               children: [
+                FeedTab(
+                  feedProvider: _feed,
+                  authProvider: widget.auth,
+                  closetProvider: _closet,
+                ),
                 ClosetTab(provider: _closet),
-                Center(child: Text('Explore (Coming soon)', style: Theme.of(context).textTheme.headlineSmall)),
-                Center(child: Text('Notifications (Coming soon)', style: Theme.of(context).textTheme.headlineSmall)),
+                Center(child: Text('Competitions (Coming soon)', style: Theme.of(context).textTheme.headlineSmall)),
                 ProfileTab(
                   profile: profile,
                   onEdit: () async {
@@ -960,11 +1314,724 @@ class _HomeScaffoldState extends State<HomeScaffold> {
         unselectedItemColor: Colors.grey,
         onTap: _onTabChanged,
         items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.rss_feed), label: 'Feed'),
           BottomNavigationBarItem(icon: Icon(Icons.checkroom), label: 'Closet'),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Explore'),
-          BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Alerts'),
+          BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Competitions'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
+      ),
+    );
+  }
+}
+
+// --- FEED TAB & RELATED SCREENS ---
+
+class FeedTab extends StatefulWidget {
+  final FeedProvider feedProvider;
+  final AuthProvider authProvider;
+  final ClosetProvider closetProvider;
+
+  const FeedTab({
+    super.key,
+    required this.feedProvider,
+    required this.authProvider,
+    required this.closetProvider,
+  });
+
+  @override
+  State<FeedTab> createState() => _FeedTabState();
+}
+
+class _FeedTabState extends State<FeedTab> {
+  @override
+  void initState() {
+    super.initState();
+    widget.feedProvider.addListener(_onFeedChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.feedProvider.removeListener(_onFeedChanged);
+    super.dispose();
+  }
+
+  void _onFeedChanged() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final feedProvider = widget.feedProvider;
+    final authProvider = widget.authProvider;
+    final closetProvider = widget.closetProvider;
+    final currentUser = authProvider.profile!;
+
+    return Scaffold(
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search posts by caption, hashtag, or username',
+                prefixIcon: const Icon(Icons.search),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              onChanged: feedProvider.setSearchQuery,
+            ),
+          ),
+          Expanded(
+            child: feedProvider.isLoading
+                ? const Center(child: CircularProgressIndicator(color: kPrimaryColor))
+                : feedProvider.posts.isEmpty
+                    ? const Center(child: Text('No posts yet. Be the first to share!'))
+                    : ListView.builder(
+                        itemCount: feedProvider.posts.length,
+                        itemBuilder: (context, index) {
+                          final post = feedProvider.posts[index];
+                          return PostCard(
+                            post: post,
+                            currentUser: currentUser,
+                            onLikeToggle: (postId) => feedProvider.toggleLike(postId, currentUser.userId),
+                            onDelete: (postId) async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Delete Post?'),
+                                  content: const Text('Are you sure you want to delete this post?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await feedProvider.deletePost(postId);
+                              }
+                            },
+                            onViewDetails: (post) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => PostDetailScreen(
+                                    post: post,
+                                    currentUser: currentUser,
+                                    onLikeToggle: (postId) => feedProvider.toggleLike(postId, currentUser.userId),
+                                    onDelete: (postId) async {
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text('Delete Post?'),
+                                          content: const Text('Are you sure you want to delete this post?'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(ctx, false),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () => Navigator.pop(ctx, true),
+                                              child: const Text('Delete'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirm == true) {
+                                        await feedProvider.deletePost(postId);
+                                        Navigator.pop(context); // Pop detail screen
+                                      }
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: kPrimaryColor,
+        child: const Icon(Icons.add),
+        onPressed: () async {
+          final newPost = await Navigator.of(context).push<FeedPost>(
+            MaterialPageRoute(
+              builder: (_) => CreatePostScreen(
+                currentUser: currentUser,
+                closetItems: closetProvider.items,
+              ),
+            ),
+          );
+          if (newPost != null) {
+            await feedProvider.addPost(newPost);
+          }
+        },
+      ),
+    );
+  }
+}
+
+class PostCard extends StatelessWidget {
+  final FeedPost post;
+  final UserProfile currentUser;
+  final ValueChanged<String> onLikeToggle;
+  final ValueChanged<String> onDelete;
+  final ValueChanged<FeedPost> onViewDetails;
+
+  const PostCard({
+    super.key,
+    required this.post,
+    required this.currentUser,
+    required this.onLikeToggle,
+    required this.onDelete,
+    required this.onViewDetails,
+  });
+
+  String _timeAgo(DateTime date) {
+    final Duration diff = DateTime.now().difference(date);
+    if (diff.inDays > 365) {
+      return '${(diff.inDays / 365).floor()}y ago';
+    } else if (diff.inDays > 30) {
+      return '${(diff.inDays / 30).floor()}mo ago';
+    } else if (diff.inDays > 7) {
+      return '${(diff.inDays / 7).floor()}w ago';
+    } else if (diff.inDays > 0) {
+      return '${diff.inDays}d ago';
+    } else if (diff.inHours > 0) {
+      return '${diff.inHours}h ago';
+    } else if (diff.inMinutes > 0) {
+      return '${diff.inMinutes}m ago';
+    } else {
+      return 'just now';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                AvatarCircle(
+                  avatarUrl: post.userAvatarUrl,
+                  initials: post.username.isNotEmpty ? post.username[0].toUpperCase() : '?',
+                  radius: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        post.username,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        _timeAgo(post.createdAt),
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                if (post.userId == currentUser.userId)
+                  IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    onPressed: () {
+                      showModalBottomSheet(
+                        context: context,
+                        builder: (ctx) => SafeArea(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ListTile(
+                                leading: const Icon(Icons.delete, color: Colors.red),
+                                title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  onDelete(post.id);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+          if (post.imageData.isNotEmpty)
+            GestureDetector(
+              onDoubleTap: () => onLikeToggle(post.id),
+              child: Image.memory(
+                base64Decode(post.imageData),
+                width: double.infinity,
+                height: 300,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 300,
+                  color: Colors.grey[200],
+                  child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        post.likedByMe ? Icons.favorite : Icons.favorite_border,
+                        color: post.likedByMe ? Colors.red : Colors.grey,
+                      ),
+                      onPressed: () => onLikeToggle(post.id),
+                    ),
+                    Text('${post.likes} likes'),
+                    const SizedBox(width: 16),
+                    IconButton(
+                      icon: const Icon(Icons.comment_outlined),
+                      onPressed: () => onViewDetails(post),
+                    ),
+                    const Text('0 comments'), // Placeholder for comments count
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${post.username} ',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(text: post.caption),
+                    ],
+                  ),
+                ),
+                if (post.hashtags.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      post.hashtags.map((e) => '#$e').join(' '),
+                      style: const TextStyle(color: kPrimaryColor),
+                    ),
+                  ),
+                if (post.closetItemId != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      'Wearing: ${post.closetItemId}', // This should ideally show the item name
+                      style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CreatePostScreen extends StatefulWidget {
+  final UserProfile currentUser;
+  final List<ClosetItem> closetItems;
+
+  const CreatePostScreen({
+    super.key,
+    required this.currentUser,
+    required this.closetItems,
+  });
+
+  @override
+  State<CreatePostScreen> createState() => _CreatePostScreenState();
+}
+
+class _CreatePostScreenState extends State<CreatePostScreen> {
+  final _formKey = GlobalKey<FormState>();
+  String _imageData = '';
+  String _caption = '';
+  String _hashtags = '';
+  ClosetItem? _selectedClosetItem;
+  bool _isLoading = false;
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 80,
+    );
+    if (picked != null) {
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        _imageData = base64Encode(bytes);
+        _selectedClosetItem = null; // Clear selected closet item if new image is uploaded
+      });
+    }
+  }
+
+  Future<void> _selectFromCloset() async {
+    final selected = await Navigator.of(context).push<ClosetItem>(
+      MaterialPageRoute(
+        builder: (_) => ClosetPickerDialog(closetItems: widget.closetItems),
+      ),
+    );
+    if (selected != null) {
+      setState(() {
+        _selectedClosetItem = selected;
+        _imageData = selected.imageBase64; // Use image from closet item
+      });
+    }
+  }
+
+  void _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_imageData.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select an image for your post.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final newPost = FeedPost(
+      id: UniqueKey().toString(),
+      userId: widget.currentUser.userId, // Assuming UserProfile has a userId
+      username: widget.currentUser.username,
+      userAvatarUrl: widget.currentUser.avatarUrl,
+      imageData: _imageData,
+      caption: _caption.trim(),
+      hashtags: _hashtags.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
+      likes: 0,
+      likedByMe: false,
+      createdAt: DateTime.now(),
+      closetItemId: _selectedClosetItem?.id,
+    );
+
+    await Future.delayed(const Duration(milliseconds: 500)); // Simulate network delay
+    setState(() => _isLoading = false);
+    if (mounted) Navigator.of(context).pop(newPost);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Create New Post'),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                if (_imageData.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.memory(
+                      base64Decode(_imageData),
+                      width: 200,
+                      height: 200,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 200,
+                        height: 200,
+                        color: Colors.grey[200],
+                        child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    width: 200,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.image, size: 60, color: Colors.grey),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _isLoading ? null : _pickImage,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text('Upload New Image'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: _isLoading ? null : _selectFromCloset,
+                      icon: const Icon(Icons.checkroom),
+                      label: const Text('From Closet'),
+                    ),
+                  ],
+                ),
+                if (_selectedClosetItem != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      'Selected from closet: ${_selectedClosetItem!.name}',
+                      style: const TextStyle(fontStyle: FontStyle.italic, color: kPrimaryColor),
+                    ),
+                  ),
+                const SizedBox(height: 24),
+                TextFormField(
+                  decoration: const InputDecoration(labelText: 'Caption'),
+                  maxLines: 3,
+                  maxLength: 500,
+                  enabled: !_isLoading,
+                  validator: validateCaption,
+                  onChanged: (v) => _caption = v,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  decoration: const InputDecoration(labelText: 'Hashtags (comma separated, e.g., fashion, OOTD)'),
+                  enabled: !_isLoading,
+                  validator: validateHashtags,
+                  onChanged: (v) => _hashtags = v,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _submit,
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Post'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ClosetPickerDialog extends StatelessWidget {
+  final List<ClosetItem> closetItems;
+
+  const ClosetPickerDialog({super.key, required this.closetItems});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select from Closet'),
+        centerTitle: true,
+      ),
+      body: closetItems.isEmpty
+          ? const Center(child: Text('Your closet is empty. Add items first!'))
+          : ListView.builder(
+              itemCount: closetItems.length,
+              itemBuilder: (context, index) {
+                final item = closetItems[index];
+                return ListTile(
+                  leading: ClosetItemImage(
+                    imageBase64: item.imageBase64,
+                    size: 40,
+                    name: item.name,
+                  ),
+                  title: Text(item.name),
+                  subtitle: Text(item.category),
+                  onTap: () {
+                    Navigator.of(context).pop(item);
+                  },
+                );
+              },
+            ),
+    );
+  }
+}
+
+class PostDetailScreen extends StatelessWidget {
+  final FeedPost post;
+  final UserProfile currentUser;
+  final ValueChanged<String> onLikeToggle;
+  final ValueChanged<String> onDelete;
+
+  const PostDetailScreen({
+    super.key,
+    required this.post,
+    required this.currentUser,
+    required this.onLikeToggle,
+    required this.onDelete,
+  });
+
+  String _timeAgo(DateTime date) {
+    final Duration diff = DateTime.now().difference(date);
+    if (diff.inDays > 365) {
+      return '${(diff.inDays / 365).floor()}y ago';
+    } else if (diff.inDays > 30) {
+      return '${(diff.inDays / 30).floor()}mo ago';
+    } else if (diff.inDays > 7) {
+      return '${(diff.inDays / 7).floor()}w ago';
+    } else if (diff.inDays > 0) {
+      return '${diff.inDays}d ago';
+    } else if (diff.inHours > 0) {
+      return '${diff.inHours}h ago';
+    } else if (diff.inMinutes > 0) {
+      return '${diff.inMinutes}m ago';
+    } else {
+      return 'just now';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Post Details'),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  AvatarCircle(
+                    avatarUrl: post.userAvatarUrl,
+                    initials: post.username.isNotEmpty ? post.username[0].toUpperCase() : '?',
+                    radius: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          post.username,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          _timeAgo(post.createdAt),
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (post.userId == currentUser.userId)
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => onDelete(post.id),
+                    ),
+                ],
+              ),
+            ),
+            if (post.imageData.isNotEmpty)
+              Image.memory(
+                base64Decode(post.imageData),
+                width: double.infinity,
+                height: 300,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 300,
+                  color: Colors.grey[200],
+                  child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          post.likedByMe ? Icons.favorite : Icons.favorite_border,
+                          color: post.likedByMe ? Colors.red : Colors.grey,
+                        ),
+                        onPressed: () => onLikeToggle(post.id),
+                      ),
+                      Text('${post.likes} likes'),
+                      const SizedBox(width: 16),
+                      const Icon(Icons.comment_outlined),
+                      const Text('0 comments'), // Placeholder for comments count
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '${post.username} ',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextSpan(text: post.caption),
+                      ],
+                    ),
+                  ),
+                  if (post.hashtags.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        post.hashtags.map((e) => '#$e').join(' '),
+                        style: const TextStyle(color: kPrimaryColor),
+                      ),
+                    ),
+                  if (post.closetItemId != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        'Wearing: ${post.closetItemId}', // This should ideally show the item name
+                        style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Comments section (scaffold only)
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Comments',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('No comments yet.'), // Placeholder
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
