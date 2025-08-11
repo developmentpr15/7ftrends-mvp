@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -8,6 +10,15 @@ void main() {
 }
 
 const kPrimaryColor = Color(0xFF8B5CF6);
+const kCategories = [
+  ClosetCategory('All', Icons.apps),
+  ClosetCategory('Tops', Icons.checkroom),
+  ClosetCategory('Bottoms', Icons.format_align_justify),
+  ClosetCategory('Dresses', Icons.checkroom),
+  ClosetCategory('Shoes', Icons.directions_walk),
+  ClosetCategory('Accessories', Icons.watch),
+  ClosetCategory('Outerwear', Icons.ac_unit),
+];
 
 class SevenFTrendsApp extends StatelessWidget {
   const SevenFTrendsApp({super.key});
@@ -115,6 +126,78 @@ class UserProfile {
       );
 }
 
+class ClosetItem {
+  final String id;
+  final String name;
+  final String category;
+  final String color;
+  final String brand;
+  final String imageBase64; // base64 string or empty
+  final DateTime createdAt;
+  final List<String> tags;
+
+  ClosetItem({
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.color,
+    required this.brand,
+    required this.imageBase64,
+    required this.createdAt,
+    required this.tags,
+  });
+
+  ClosetItem copyWith({
+    String? id,
+    String? name,
+    String? category,
+    String? color,
+    String? brand,
+    String? imageBase64,
+    DateTime? createdAt,
+    List<String>? tags,
+  }) {
+    return ClosetItem(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      color: color ?? this.color,
+      brand: brand ?? this.brand,
+      imageBase64: imageBase64 ?? this.imageBase64,
+      createdAt: createdAt ?? this.createdAt,
+      tags: tags ?? this.tags,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'category': category,
+        'color': color,
+        'brand': brand,
+        'imageBase64': imageBase64,
+        'createdAt': createdAt.toIso8601String(),
+        'tags': tags,
+      };
+
+  factory ClosetItem.fromJson(Map<String, dynamic> json) => ClosetItem(
+        id: json['id'],
+        name: json['name'],
+        category: json['category'],
+        color: json['color'],
+        brand: json['brand'],
+        imageBase64: json['imageBase64'] ?? '',
+        createdAt: DateTime.parse(json['createdAt']),
+        tags: (json['tags'] as List).map((e) => e.toString()).toList(),
+      );
+}
+
+class ClosetCategory {
+  final String name;
+  final IconData icon;
+  const ClosetCategory(this.name, this.icon);
+}
+
 // --- SERVICES ---
 
 class LocalSessionService {
@@ -154,6 +237,32 @@ class LocalSessionService {
   }
 }
 
+class LocalClosetService {
+  static const _closetKey = 'closet_items';
+
+  Future<List<ClosetItem>> loadClosetItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_closetKey);
+    if (jsonStr == null) return [];
+    try {
+      final list = jsonDecode(jsonStr) as List;
+      return list.map((e) => ClosetItem.fromJson(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveClosetItems(List<ClosetItem> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_closetKey, jsonEncode(items.map((e) => e.toJson()).toList()));
+  }
+
+  Future<void> clearClosetItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_closetKey);
+  }
+}
+
 // --- PROVIDERS ---
 
 class AuthProvider extends ChangeNotifier {
@@ -184,7 +293,6 @@ class AuthProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
     await Future.delayed(const Duration(seconds: 1));
-    // Simulate login: accept any email/password
     _profile = UserProfile(
       email: email,
       username: email.split('@')[0],
@@ -202,7 +310,6 @@ class AuthProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
     await Future.delayed(const Duration(seconds: 1));
-    // Simulate signup: accept any
     _profile = UserProfile(
       email: email,
       username: username,
@@ -238,6 +345,126 @@ class AuthProvider extends ChangeNotifier {
   }
 }
 
+class ClosetProvider extends ChangeNotifier {
+  final LocalClosetService _service = LocalClosetService();
+  List<ClosetItem> _items = [];
+  bool _isLoading = false;
+  String _filterCategory = 'All';
+  String _search = '';
+
+  List<ClosetItem> get items => _filteredItems();
+  bool get isLoading => _isLoading;
+  String get filterCategory => _filterCategory;
+  String get search => _search;
+
+  ClosetProvider() {
+    _load();
+  }
+
+  Future<void> _load() async {
+    _isLoading = true;
+    notifyListeners();
+    _items = await _service.loadClosetItems();
+    if (_items.isEmpty) {
+      _items = _mockData();
+      await _service.saveClosetItems(_items);
+    }
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  List<ClosetItem> _filteredItems() {
+    var list = _items;
+    if (_filterCategory != 'All') {
+      list = list.where((e) => e.category == _filterCategory).toList();
+    }
+    if (_search.trim().isNotEmpty) {
+      final q = _search.trim().toLowerCase();
+      list = list.where((e) =>
+          e.name.toLowerCase().contains(q) ||
+          e.brand.toLowerCase().contains(q) ||
+          e.tags.any((t) => t.toLowerCase().contains(q))).toList();
+    }
+    return list;
+  }
+
+  void setCategory(String category) {
+    _filterCategory = category;
+    notifyListeners();
+  }
+
+  void setSearch(String value) {
+    _search = value;
+    notifyListeners();
+  }
+
+  Future<void> addItem(ClosetItem item) async {
+    _items.insert(0, item);
+    notifyListeners();
+    await _service.saveClosetItems(_items);
+  }
+
+  Future<void> updateItem(ClosetItem item) async {
+    final idx = _items.indexWhere((e) => e.id == item.id);
+    if (idx != -1) {
+      _items[idx] = item;
+      notifyListeners();
+      await _service.saveClosetItems(_items);
+    }
+  }
+
+  Future<void> deleteItem(String id) async {
+    _items.removeWhere((e) => e.id == id);
+    notifyListeners();
+    await _service.saveClosetItems(_items);
+  }
+
+  List<ClosetItem> _mockData() {
+    return [
+      ClosetItem(
+        id: UniqueKey().toString(),
+        name: 'White T-Shirt',
+        category: 'Tops',
+        color: 'White',
+        brand: 'Uniqlo',
+        imageBase64: '',
+        createdAt: DateTime.now().subtract(const Duration(days: 2)),
+        tags: ['casual', 'summer'],
+      ),
+      ClosetItem(
+        id: UniqueKey().toString(),
+        name: 'Blue Jeans',
+        category: 'Bottoms',
+        color: 'Blue',
+        brand: 'Levi\'s',
+        imageBase64: '',
+        createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        tags: ['denim', 'classic'],
+      ),
+      ClosetItem(
+        id: UniqueKey().toString(),
+        name: 'Red Dress',
+        category: 'Dresses',
+        color: 'Red',
+        brand: 'Zara',
+        imageBase64: '',
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        tags: ['party', 'evening'],
+      ),
+      ClosetItem(
+        id: UniqueKey().toString(),
+        name: 'Sneakers',
+        category: 'Shoes',
+        color: 'White',
+        brand: 'Nike',
+        imageBase64: '',
+        createdAt: DateTime.now().subtract(const Duration(days: 4)),
+        tags: ['sport', 'casual'],
+      ),
+    ];
+  }
+}
+
 // --- VALIDATION UTILS ---
 
 String? validateUsername(String? value, {Set<String>? takenUsernames}) {
@@ -258,6 +485,19 @@ String? validateDisplayName(String? value) {
 
 String? validateBio(String? value) {
   if (value != null && value.length > 180) return 'Max 180 characters';
+  return null;
+}
+
+String? validateItemName(String? value) {
+  if (value == null || value.trim().isEmpty) return 'Name required';
+  final v = value.trim();
+  if (v.length < 2 || v.length > 50) return '2-50 characters';
+  return null;
+}
+
+String? validateCategory(String? value) {
+  if (value == null || value.trim().isEmpty) return 'Category required';
+  if (!kCategories.any((c) => c.name == value)) return 'Invalid category';
   return null;
 }
 
@@ -284,7 +524,6 @@ class AvatarCircle extends StatelessWidget {
         backgroundColor: kPrimaryColor.withOpacity(0.2),
       );
     }
-    // Color from initials for variety
     final color = kPrimaryColor.withOpacity(0.8);
     return CircleAvatar(
       radius: radius,
@@ -295,6 +534,50 @@ class AvatarCircle extends StatelessWidget {
           color: Colors.white,
           fontSize: radius * 0.7,
           fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
+class ClosetItemImage extends StatelessWidget {
+  final String imageBase64;
+  final double size;
+  final String name;
+  const ClosetItemImage({super.key, required this.imageBase64, required this.size, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageBase64.isNotEmpty) {
+      try {
+        final bytes = base64Decode(imageBase64);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.memory(
+            bytes,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+          ),
+        );
+      } catch (_) {}
+    }
+    // Placeholder: colored box with first letter
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: kPrimaryColor.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Text(
+          name.isNotEmpty ? name[0].toUpperCase() : '?',
+          style: TextStyle(
+            color: kPrimaryColor,
+            fontWeight: FontWeight.bold,
+            fontSize: size * 0.5,
+          ),
         ),
       ),
     );
@@ -554,13 +837,24 @@ class _HomeScaffoldState extends State<HomeScaffold> {
   int _tabIndex = 0;
   bool _loadingTab = false;
   late LocalSessionService _session;
+  late ClosetProvider _closet;
 
   @override
   void initState() {
     super.initState();
     _session = LocalSessionService();
+    _closet = ClosetProvider();
     _loadLastTab();
+    _closet.addListener(_onClosetChanged);
   }
+
+  @override
+  void dispose() {
+    _closet.removeListener(_onClosetChanged);
+    super.dispose();
+  }
+
+  void _onClosetChanged() => setState(() {});
 
   Future<void> _loadLastTab() async {
     final idx = await _session.loadLastTabIndex();
@@ -619,13 +913,12 @@ class _HomeScaffoldState extends State<HomeScaffold> {
           : IndexedStack(
               index: _tabIndex,
               children: [
-                Center(child: Text('Feed (Coming soon)', style: Theme.of(context).textTheme.headlineSmall)),
+                ClosetTab(provider: _closet),
                 Center(child: Text('Explore (Coming soon)', style: Theme.of(context).textTheme.headlineSmall)),
                 Center(child: Text('Notifications (Coming soon)', style: Theme.of(context).textTheme.headlineSmall)),
                 ProfileTab(
                   profile: profile,
                   onEdit: () async {
-                    // In a real app, this would be all usernames except the current user's
                     final takenUsernames = {profile.username};
                     final updated = await Navigator.of(context).push<UserProfile>(
                       MaterialPageRoute(
@@ -667,7 +960,7 @@ class _HomeScaffoldState extends State<HomeScaffold> {
         unselectedItemColor: Colors.grey,
         onTap: _onTabChanged,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Feed'),
+          BottomNavigationBarItem(icon: Icon(Icons.checkroom), label: 'Closet'),
           BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Explore'),
           BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Alerts'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
@@ -676,6 +969,655 @@ class _HomeScaffoldState extends State<HomeScaffold> {
     );
   }
 }
+
+// --- CLOSET TAB & RELATED SCREENS ---
+
+class ClosetTab extends StatefulWidget {
+  final ClosetProvider provider;
+  const ClosetTab({super.key, required this.provider});
+
+  @override
+  State<ClosetTab> createState() => _ClosetTabState();
+}
+
+class _ClosetTabState extends State<ClosetTab> {
+  @override
+  void initState() {
+    super.initState();
+    widget.provider.addListener(_onProviderChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.provider.removeListener(_onProviderChanged);
+    super.dispose();
+  }
+
+  void _onProviderChanged() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = widget.provider;
+    return Scaffold(
+      body: Column(
+        children: [
+          _ClosetCategoryChips(
+            selected: provider.filterCategory,
+            onSelected: provider.setCategory,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search by name, brand, or tag',
+                prefixIcon: const Icon(Icons.search),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              onChanged: provider.setSearch,
+            ),
+          ),
+          Expanded(
+            child: provider.isLoading
+                ? const Center(child: CircularProgressIndicator(color: kPrimaryColor))
+                : _ClosetGrid(
+                    items: provider.items,
+                    onTap: (item) async {
+                      await showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => ItemDetailSheet(
+                          item: item,
+                          onEdit: (updated) async {
+                            await provider.updateItem(updated);
+                            Navigator.pop(context);
+                          },
+                          onDelete: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Delete Item?'),
+                                content: const Text('Are you sure you want to delete this item?'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await provider.deleteItem(item.id);
+                              Navigator.pop(context);
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: kPrimaryColor,
+        child: const Icon(Icons.add),
+        onPressed: () async {
+          final newItem = await Navigator.of(context).push<ClosetItem>(
+            MaterialPageRoute(
+              builder: (_) => AddItemScreen(),
+            ),
+          );
+          if (newItem != null) {
+            await provider.addItem(newItem);
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _ClosetCategoryChips extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onSelected;
+  const _ClosetCategoryChips({required this.selected, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        itemCount: kCategories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final cat = kCategories[i];
+          final isSelected = selected == cat.name;
+          return ChoiceChip(
+            label: Row(
+              children: [
+                Icon(cat.icon, size: 18, color: isSelected ? Colors.white : kPrimaryColor),
+                const SizedBox(width: 4),
+                Text(cat.name),
+              ],
+            ),
+            selected: isSelected,
+            selectedColor: kPrimaryColor,
+            backgroundColor: Colors.white,
+            labelStyle: TextStyle(color: isSelected ? Colors.white : kPrimaryColor),
+            onSelected: (_) => onSelected(cat.name),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ClosetGrid extends StatelessWidget {
+  final List<ClosetItem> items;
+  final ValueChanged<ClosetItem> onTap;
+  const _ClosetGrid({required this.items, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final crossAxisCount = MediaQuery.of(context).size.width > 900
+        ? 3
+        : MediaQuery.of(context).size.width > 600
+            ? 2
+            : 1;
+    return items.isEmpty
+        ? const Center(child: Text('No items found.'))
+        : GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 0.8,
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final item = items[i];
+              return GestureDetector(
+                onTap: () => onTap(item),
+                child: Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ClosetItemImage(
+                        imageBase64: item.imageBase64,
+                        size: 120,
+                        name: item.name,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          item.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: kPrimaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            item.category,
+                            style: const TextStyle(color: kPrimaryColor, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+  }
+}
+
+class AddItemScreen extends StatefulWidget {
+  @override
+  State<AddItemScreen> createState() => _AddItemScreenState();
+}
+
+class _AddItemScreenState extends State<AddItemScreen> {
+  final _formKey = GlobalKey<FormState>();
+  String _name = '';
+  String _category = '';
+  String _color = '';
+  String _brand = '';
+  String _imageBase64 = '';
+  String _tags = '';
+  bool _isLoading = false;
+  String? _error;
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 80,
+    );
+    if (picked != null) {
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        _imageBase64 = base64Encode(bytes);
+      });
+    }
+  }
+
+  void _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    await Future.delayed(const Duration(milliseconds: 500));
+    final item = ClosetItem(
+      id: UniqueKey().toString(),
+      name: _name.trim(),
+      category: _category,
+      color: _color.trim(),
+      brand: _brand.trim(),
+      imageBase64: _imageBase64,
+      createdAt: DateTime.now(),
+      tags: _tags.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
+    );
+    setState(() => _isLoading = false);
+    if (mounted) Navigator.of(context).pop(item);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Add Closet Item'),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                  ),
+                GestureDetector(
+                  onTap: _isLoading ? null : _pickImage,
+                  child: ClosetItemImage(
+                    imageBase64: _imageBase64,
+                    size: 120,
+                    name: _name,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  decoration: const InputDecoration(labelText: 'Name'),
+                  enabled: !_isLoading,
+                  validator: validateItemName,
+                  onChanged: (v) => _name = v,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  value: _category.isEmpty ? null : _category,
+                  items: kCategories
+                      .where((c) => c.name != 'All')
+                      .map((c) => DropdownMenuItem(
+                            value: c.name,
+                            child: Text(c.name),
+                          ))
+                      .toList(),
+                  onChanged: _isLoading ? null : (v) => setState(() => _category = v ?? ''),
+                  validator: validateCategory,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  decoration: const InputDecoration(labelText: 'Color'),
+                  enabled: !_isLoading,
+                  onChanged: (v) => _color = v,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  decoration: const InputDecoration(labelText: 'Brand'),
+                  enabled: !_isLoading,
+                  onChanged: (v) => _brand = v,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  decoration: const InputDecoration(labelText: 'Tags (comma separated)'),
+                  enabled: !_isLoading,
+                  onChanged: (v) => _tags = v,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _submit,
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Add Item'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                Navigator.of(context).pop();
+                              },
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ItemDetailSheet extends StatelessWidget {
+  final ClosetItem item;
+  final ValueChanged<ClosetItem> onEdit;
+  final VoidCallback onDelete;
+
+  const ItemDetailSheet({
+    super.key,
+    required this.item,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return SingleChildScrollView(
+          controller: scrollController,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: ClosetItemImage(
+                    imageBase64: item.imageBase64,
+                    size: 140,
+                    name: item.name,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  item.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: kPrimaryColor),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: kPrimaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      item.category,
+                      style: const TextStyle(color: kPrimaryColor, fontSize: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (item.brand.isNotEmpty)
+                  Text('Brand: ${item.brand}', style: const TextStyle(fontSize: 16)),
+                if (item.color.isNotEmpty)
+                  Text('Color: ${item.color}', style: const TextStyle(fontSize: 16)),
+                if (item.tags.isNotEmpty)
+                  Text('Tags: ${item.tags.join(', ')}', style: const TextStyle(fontSize: 16)),
+                const SizedBox(height: 12),
+                Text(
+                  'Added: ${item.createdAt.toLocal().toString().split(' ').first}',
+                  style: const TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final updated = await Navigator.of(context).push<ClosetItem>(
+                      MaterialPageRoute(
+                        builder: (_) => EditItemScreen(item: item),
+                      ),
+                    );
+                    if (updated != null) {
+                      onEdit(updated);
+                    }
+                  },
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class EditItemScreen extends StatefulWidget {
+  final ClosetItem item;
+  const EditItemScreen({super.key, required this.item});
+
+  @override
+  State<EditItemScreen> createState() => _EditItemScreenState();
+}
+
+class _EditItemScreenState extends State<EditItemScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late String _name;
+  late String _category;
+  late String _color;
+  late String _brand;
+  late String _imageBase64;
+  late String _tags;
+  bool _isLoading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = widget.item.name;
+    _category = widget.item.category;
+    _color = widget.item.color;
+    _brand = widget.item.brand;
+    _imageBase64 = widget.item.imageBase64;
+    _tags = widget.item.tags.join(', ');
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 80,
+    );
+    if (picked != null) {
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        _imageBase64 = base64Encode(bytes);
+      });
+    }
+  }
+
+  void _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    await Future.delayed(const Duration(milliseconds: 500));
+    final updated = widget.item.copyWith(
+      name: _name.trim(),
+      category: _category,
+      color: _color.trim(),
+      brand: _brand.trim(),
+      imageBase64: _imageBase64,
+      tags: _tags.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
+    );
+    setState(() => _isLoading = false);
+    if (mounted) Navigator.of(context).pop(updated);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Edit Closet Item'),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                  ),
+                GestureDetector(
+                  onTap: _isLoading ? null : _pickImage,
+                  child: ClosetItemImage(
+                    imageBase64: _imageBase64,
+                    size: 120,
+                    name: _name,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  initialValue: _name,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                  enabled: !_isLoading,
+                  validator: validateItemName,
+                  onChanged: (v) => _name = v,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  value: _category.isEmpty ? null : _category,
+                  items: kCategories
+                      .where((c) => c.name != 'All')
+                      .map((c) => DropdownMenuItem(
+                            value: c.name,
+                            child: Text(c.name),
+                          ))
+                      .toList(),
+                  onChanged: _isLoading ? null : (v) => setState(() => _category = v ?? ''),
+                  validator: validateCategory,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  initialValue: _color,
+                  decoration: const InputDecoration(labelText: 'Color'),
+                  enabled: !_isLoading,
+                  onChanged: (v) => _color = v,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  initialValue: _brand,
+                  decoration: const InputDecoration(labelText: 'Brand'),
+                  enabled: !_isLoading,
+                  onChanged: (v) => _brand = v,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  initialValue: _tags,
+                  decoration: const InputDecoration(labelText: 'Tags (comma separated)'),
+                  enabled: !_isLoading,
+                  onChanged: (v) => _tags = v,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _submit,
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Save'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                Navigator.of(context).pop();
+                              },
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// --- PROFILE TAB (unchanged from Day 2) ---
 
 class ProfileTab extends StatelessWidget {
   final UserProfile profile;
@@ -713,7 +1655,6 @@ class ProfileTab extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           if (profile.bio.isNotEmpty) const SizedBox(height: 12),
-          // Placeholder for stats
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
