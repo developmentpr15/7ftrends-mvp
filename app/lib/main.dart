@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'screens/auth_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -210,10 +211,9 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Authentication coming tomorrow! 🎉'),
-                    backgroundColor: Color(0xFF8B5CF6),
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const AuthScreen(),
                   ),
                 );
               },

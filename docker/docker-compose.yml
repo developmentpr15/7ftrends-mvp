@@ -1,0 +1,23 @@
+﻿version: "3.8"
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sevenftrends
+    ports:
+      - "5432:5432"
+  hasura:
+    image: hasura/graphql-engine:v2.40.0
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/sevenftrends
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_ADMIN_SECRET: devsecret
+    ports:
+      - "8080:8080"
