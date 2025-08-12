@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -320,6 +322,125 @@ class Comment {
       );
 }
 
+// --- COMPETITION MODELS ---
+
+class Competition {
+  final String id;
+  final String title;
+  final String description;
+  final String theme;
+  final DateTime endDate;
+  final String coverImageUrl;
+
+  Competition({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.theme,
+    required this.endDate,
+    required this.coverImageUrl,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'description': description,
+        'theme': theme,
+        'endDate': endDate.toIso8601String(),
+        'coverImageUrl': coverImageUrl,
+      };
+
+  factory Competition.fromJson(Map<String, dynamic> json) => Competition(
+        id: json['id'],
+        title: json['title'],
+        description: json['description'],
+        theme: json['theme'],
+        endDate: DateTime.parse(json['endDate']),
+        coverImageUrl: json['coverImageUrl'] ?? '',
+      );
+}
+
+class CompetitionEntry {
+  final String id;
+  final String competitionId;
+  final String postId;
+  final String userId;
+  final String username;
+  final String userAvatarUrl;
+  final String imageData;
+  final DateTime createdAt;
+
+  CompetitionEntry({
+    required this.id,
+    required this.competitionId,
+    required this.postId,
+    required this.userId,
+    required this.username,
+    required this.userAvatarUrl,
+    required this.imageData,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'competitionId': competitionId,
+        'postId': postId,
+        'userId': userId,
+        'username': username,
+        'userAvatarUrl': userAvatarUrl,
+        'imageData': imageData,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory CompetitionEntry.fromJson(Map<String, dynamic> json) =>
+      CompetitionEntry(
+        id: json['id'],
+        competitionId: json['competitionId'],
+        postId: json['postId'],
+        userId: json['userId'],
+        username: json['username'],
+        userAvatarUrl: json['userAvatarUrl'],
+        imageData: json['imageData'],
+        createdAt: DateTime.parse(json['createdAt']),
+      );
+}
+
+class Vote {
+  final String entryId;
+  final String userId;
+  final int rating; // 1-5
+
+  Vote({
+    required this.entryId,
+    required this.userId,
+    required this.rating,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'entryId': entryId,
+        'userId': userId,
+        'rating': rating,
+      };
+
+  factory Vote.fromJson(Map<String, dynamic> json) => Vote(
+        entryId: json['entryId'],
+        userId: json['userId'],
+        rating: json['rating'],
+      );
+}
+
+class LeaderboardEntry {
+  final CompetitionEntry entry;
+  final double averageRating;
+  final int voteCount;
+
+  LeaderboardEntry({
+    required this.entry,
+    required this.averageRating,
+    required this.voteCount,
+  });
+}
+
 // --- SERVICES ---
 
 class LocalSessionService {
@@ -408,6 +529,63 @@ class LocalFeedService {
   Future<void> clearFeedPosts() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_feedKey);
+  }
+}
+
+class LocalCompetitionService {
+  static const _competitionsKey = 'competitions_data';
+  static const _entriesKey = 'competition_entries_data';
+  static const _votesKey = 'competition_votes_data';
+
+  Future<List<Competition>> loadCompetitions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_competitionsKey);
+    if (jsonStr == null) return [];
+    try {
+      final list = jsonDecode(jsonStr) as List;
+      return list.map((e) => Competition.fromJson(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveCompetitions(List<Competition> competitions) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_competitionsKey, jsonEncode(competitions.map((e) => e.toJson()).toList()));
+  }
+
+  Future<List<CompetitionEntry>> loadEntries() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_entriesKey);
+    if (jsonStr == null) return [];
+    try {
+      final list = jsonDecode(jsonStr) as List;
+      return list.map((e) => CompetitionEntry.fromJson(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveEntries(List<CompetitionEntry> entries) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_entriesKey, jsonEncode(entries.map((e) => e.toJson()).toList()));
+  }
+
+  Future<List<Vote>> loadVotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_votesKey);
+    if (jsonStr == null) return [];
+    try {
+      final list = jsonDecode(jsonStr) as List;
+      return list.map((e) => Vote.fromJson(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveVotes(List<Vote> votes) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_votesKey, jsonEncode(votes.map((e) => e.toJson()).toList()));
   }
 }
 
@@ -683,9 +861,12 @@ class FeedProvider extends ChangeNotifier {
   }
 
   List<FeedPost> _mockFeedData() {
+    // In a real app, you'd fetch this from a server.
+    // For this MVP, we'll create some mock posts.
+    // Using picsum.photos for random images.
     return [
       FeedPost(
-        id: UniqueKey().toString(),
+        id: 'post1',
         userId: 'user1',
         username: 'fashionista_gal',
         userAvatarUrl: 'https://picsum.photos/id/1005/50/50',
@@ -698,7 +879,7 @@ class FeedProvider extends ChangeNotifier {
         closetItemId: null,
       ),
       FeedPost(
-        id: UniqueKey().toString(),
+        id: 'post2',
         userId: 'user2',
         username: 'style_guru',
         userAvatarUrl: 'https://picsum.photos/id/1011/50/50',
@@ -708,10 +889,10 @@ class FeedProvider extends ChangeNotifier {
         likes: 30,
         likedByMe: true,
         createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-        closetItemId: null, // Assuming a red dress from closet
+        closetItemId: null, 
       ),
       FeedPost(
-        id: UniqueKey().toString(),
+        id: 'post3',
         userId: 'user1',
         username: 'fashionista_gal',
         userAvatarUrl: 'https://picsum.photos/id/1005/50/50',
@@ -723,72 +904,142 @@ class FeedProvider extends ChangeNotifier {
         createdAt: DateTime.now().subtract(const Duration(hours: 5)),
         closetItemId: null,
       ),
-      FeedPost(
-        id: UniqueKey().toString(),
-        userId: 'user3',
-        username: 'trendsetter',
-        userAvatarUrl: 'https://picsum.photos/id/1012/50/50',
-        imageData: '', // Placeholder
-        caption: 'New sneakers alert! So comfy and stylish. #sneakers #sporty',
-        hashtags: ['sneakers', 'sporty'],
-        likes: 45,
-        likedByMe: false,
-        createdAt: DateTime.now().subtract(const Duration(days: 1)),
-        closetItemId: null,
-      ),
-      FeedPost(
-        id: UniqueKey().toString(),
-        userId: 'user2',
-        username: 'style_guru',
-        userAvatarUrl: 'https://picsum.photos/id/1011/50/50',
-        imageData: '', // Placeholder
-        caption: 'Accessorizing is key! Love this new watch. #accessories #style',
-        hashtags: ['accessories', 'style'],
-        likes: 10,
-        likedByMe: false,
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-        closetItemId: null,
-      ),
-      FeedPost(
-        id: UniqueKey().toString(),
-        userId: 'user4',
-        username: 'minimalist_chic',
-        userAvatarUrl: 'https://picsum.photos/id/1015/50/50',
-        imageData: '', // Placeholder
-        caption: 'Keeping it simple and elegant with a classic white tee. #minimalist #classic',
-        hashtags: ['minimalist', 'classic'],
-        likes: 18,
-        likedByMe: true,
-        createdAt: DateTime.now().subtract(const Duration(days: 3)),
-        closetItemId: null,
-      ),
-      FeedPost(
-        id: UniqueKey().toString(),
-        userId: 'user1',
-        username: 'fashionista_gal',
-        userAvatarUrl: 'https://picsum.photos/id/1005/50/50',
-        imageData: '', // Placeholder
-        caption: 'Ready for autumn with this cozy outerwear. #autumnfashion #outerwear',
-        hashtags: ['autumnfashion', 'outerwear'],
-        likes: 25,
-        likedByMe: false,
-        createdAt: DateTime.now().subtract(const Duration(days: 4)),
-        closetItemId: null,
-      ),
-      FeedPost(
-        id: UniqueKey().toString(),
-        userId: 'user3',
-        username: 'trendsetter',
-        userAvatarUrl: 'https://picsum.photos/id/1012/50/50',
-        imageData: '', // Placeholder
-        caption: 'Experimenting with new color palettes. What do you think? #colorblock #fashiontips',
-        hashtags: ['colorblock', 'fashiontips'],
-        likes: 35,
-        likedByMe: false,
-        createdAt: DateTime.now().subtract(const Duration(days: 5)),
-        closetItemId: null,
-      ),
     ];
+  }
+}
+
+class CompetitionProvider extends ChangeNotifier {
+  final LocalCompetitionService _service = LocalCompetitionService();
+  List<Competition> _competitions = [];
+  List<CompetitionEntry> _entries = [];
+  List<Vote> _votes = [];
+  bool _isLoading = false;
+
+  List<Competition> get competitions => _competitions;
+  bool get isLoading => _isLoading;
+
+  CompetitionProvider() {
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    _isLoading = true;
+    notifyListeners();
+    _competitions = await _service.loadCompetitions();
+    _entries = await _service.loadEntries();
+    _votes = await _service.loadVotes();
+
+    if (_competitions.isEmpty) {
+      await _generateMockData();
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> _generateMockData() async {
+    _competitions = [
+      Competition(id: 'c1', title: 'Summer Vibes', description: 'Show off your best summer outfits!', theme: 'Summer', endDate: DateTime.now().add(const Duration(days: 7)), coverImageUrl: 'https://picsum.photos/seed/summer/800/400'),
+      Competition(id: 'c2', title: 'Streetwear Challenge', description: 'The best urban looks.', theme: 'Streetwear', endDate: DateTime.now().add(const Duration(days: 14)), coverImageUrl: 'https://picsum.photos/seed/street/800/400'),
+      Competition(id: 'c3', title: 'Formal Night', description: 'Elegance and class.', theme: 'Formal', endDate: DateTime.now().add(const Duration(days: 5)), coverImageUrl: 'https://picsum.photos/seed/formal/800/400'),
+      Competition(id: 'c4', title: 'Vintage Finds', description: 'Rock your retro style.', theme: 'Vintage', endDate: DateTime.now().add(const Duration(days: 20)), coverImageUrl: 'https://picsum.photos/seed/vintage/800/400'),
+    ];
+
+    // Generate some random image data for mock entries
+    final random = Random();
+    String generateRandomImageData() {
+      final randomBytes = Uint8List.fromList(
+        List.generate(100, (index) => random.nextInt(256))
+      );
+      return base64Encode(randomBytes);
+    }
+
+    _entries = [
+      CompetitionEntry(id: 'e1', competitionId: 'c1', postId: 'p1', userId: 'user1', username: 'fashionista_gal', userAvatarUrl: 'https://picsum.photos/id/1005/50/50', imageData: generateRandomImageData(), createdAt: DateTime.now().subtract(const Duration(hours: 2))),
+      CompetitionEntry(id: 'e2', competitionId: 'c1', postId: 'p2', userId: 'user2', username: 'style_guru', userAvatarUrl: 'https://picsum.photos/id/1011/50/50', imageData: generateRandomImageData(), createdAt: DateTime.now().subtract(const Duration(hours: 5))),
+      CompetitionEntry(id: 'e3', competitionId: 'c2', postId: 'p3', userId: 'user3', username: 'trendsetter', userAvatarUrl: 'https://picsum.photos/id/1012/50/50', imageData: generateRandomImageData(), createdAt: DateTime.now().subtract(const Duration(days: 1))),
+    ];
+
+    _votes = [
+      Vote(entryId: 'e1', userId: 'user2', rating: 5),
+      Vote(entryId: 'e1', userId: 'user3', rating: 4),
+      Vote(entryId: 'e2', userId: 'user1', rating: 3),
+    ];
+
+    await _saveAll();
+  }
+
+  Future<void> _saveAll() async {
+    await _service.saveCompetitions(_competitions);
+    await _service.saveEntries(_entries);
+    await _service.saveVotes(_votes);
+  }
+
+  List<CompetitionEntry> getEntriesForCompetition(String competitionId) {
+    return _entries.where((e) => e.competitionId == competitionId).toList();
+  }
+
+  int getParticipantCount(String competitionId) {
+    return getEntriesForCompetition(competitionId).map((e) => e.userId).toSet().length;
+  }
+
+  Future<void> submitVote(String entryId, String userId, int rating) async {
+    _votes.removeWhere((v) => v.entryId == entryId && v.userId == userId);
+    _votes.add(Vote(entryId: entryId, userId: userId, rating: rating));
+    notifyListeners();
+    await _service.saveVotes(_votes);
+  }
+
+  int? getUserVote(String entryId, String userId) {
+    try {
+      return _votes.firstWhere((v) => v.entryId == entryId && v.userId == userId).rating;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  double getAverageRating(String entryId) {
+    final entryVotes = _votes.where((v) => v.entryId == entryId).toList();
+    if (entryVotes.isEmpty) return 0.0;
+    final sum = entryVotes.fold<int>(0, (prev, vote) => prev + vote.rating);
+    return sum / entryVotes.length;
+  }
+
+  List<LeaderboardEntry> getLeaderboard(String competitionId) {
+    final competitionEntries = getEntriesForCompetition(competitionId);
+    final leaderboard = competitionEntries.map((entry) {
+      final entryVotes = _votes.where((v) => v.entryId == entry.id).toList();
+      final voteCount = entryVotes.length;
+      final averageRating = getAverageRating(entry.id);
+      return LeaderboardEntry(entry: entry, averageRating: averageRating, voteCount: voteCount);
+    }).toList();
+
+    leaderboard.sort((a, b) => b.averageRating.compareTo(a.averageRating));
+    return leaderboard;
+  }
+
+  bool hasUserEntered(String competitionId, String userId) {
+    return _entries.any((e) => e.competitionId == competitionId && e.userId == userId);
+  }
+
+  bool hasPostBeenSubmitted(String postId) {
+    return _entries.any((e) => e.postId == postId);
+  }
+
+  Future<void> addEntry(FeedPost post, String competitionId) async {
+    final newEntry = CompetitionEntry(
+      id: UniqueKey().toString(),
+      competitionId: competitionId,
+      postId: post.id,
+      userId: post.userId,
+      username: post.username,
+      userAvatarUrl: post.userAvatarUrl,
+      imageData: post.imageData,
+      createdAt: DateTime.now(),
+    );
+    _entries.add(newEntry);
+    notifyListeners();
+    await _service.saveEntries(_entries);
   }
 }
 
@@ -862,7 +1113,7 @@ class AvatarCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (avatarUrl != null && avatarUrl!.isNotEmpty) {
+    if (avatarUrl != null && avatarUrl!.isNotEmpty && avatarUrl!.startsWith('http')) {
       return CircleAvatar(
         radius: radius,
         backgroundImage: NetworkImage(avatarUrl!),
@@ -893,38 +1144,45 @@ class ClosetItemImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (imageBase64.isNotEmpty) {
-      try {
-        final bytes = base64Decode(imageBase64);
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.memory(
-            bytes,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double actualSize = size.isFinite ? size : constraints.maxWidth;
+
+        if (imageBase64.isNotEmpty) {
+          try {
+            final bytes = base64Decode(imageBase64);
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.memory(
+                bytes,
+                width: actualSize,
+                height: actualSize,
+                fit: BoxFit.cover,
+              ),
+            );
+          } catch (_) {}
+        }
+        
+        // Placeholder
+        return Container(
+          width: actualSize,
+          height: actualSize,
+          decoration: BoxDecoration(
+            color: kPrimaryColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Text(
+              name.isNotEmpty ? name[0].toUpperCase() : '?',
+              style: TextStyle(
+                color: kPrimaryColor,
+                fontWeight: FontWeight.bold,
+                fontSize: actualSize * 0.5,
+              ),
+            ),
           ),
         );
-      } catch (_) {}
-    }
-    // Placeholder: colored box with first letter
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: kPrimaryColor.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Center(
-        child: Text(
-          name.isNotEmpty ? name[0].toUpperCase() : '?',
-          style: TextStyle(
-            color: kPrimaryColor,
-            fontWeight: FontWeight.bold,
-            fontSize: size * 0.5,
-          ),
-        ),
-      ),
+      },
     );
   }
 }
@@ -958,9 +1216,11 @@ class _SplashScreenState extends State<SplashScreen>
     );
     _controller.forward();
     Future.delayed(const Duration(seconds: 2), () async {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => AuthGate()),
-      );
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => AuthGate()),
+        );
+      }
     });
   }
 
@@ -1002,7 +1262,7 @@ class _SplashScreenState extends State<SplashScreen>
                 const Text(
                   '7ftrends',
                   style: TextStyle(
-                    color: kPrimaryColor,
+                    color: Colors.white,
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1022,6 +1282,7 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
   @override
   State<AuthGate> createState() => _AuthGateState();
 }
@@ -1184,6 +1445,7 @@ class _HomeScaffoldState extends State<HomeScaffold> {
   late LocalSessionService _session;
   late ClosetProvider _closet;
   late FeedProvider _feed;
+  late CompetitionProvider _competition;
 
   @override
   void initState() {
@@ -1191,20 +1453,25 @@ class _HomeScaffoldState extends State<HomeScaffold> {
     _session = LocalSessionService();
     _closet = ClosetProvider();
     _feed = FeedProvider();
+    _competition = CompetitionProvider();
     _loadLastTab();
-    _closet.addListener(_onClosetChanged);
-    _feed.addListener(_onFeedChanged);
+    _closet.addListener(_onProviderChanged);
+    _feed.addListener(_onProviderChanged);
+    _competition.addListener(_onProviderChanged);
   }
 
   @override
   void dispose() {
-    _closet.removeListener(_onClosetChanged);
-    _feed.removeListener(_onFeedChanged);
+    _closet.removeListener(_onProviderChanged);
+    _feed.removeListener(_onProviderChanged);
+    _competition.removeListener(_onProviderChanged);
+    _closet.dispose();
+    _feed.dispose();
+    _competition.dispose();
     super.dispose();
   }
 
-  void _onClosetChanged() => setState(() {});
-  void _onFeedChanged() => setState(() {});
+  void _onProviderChanged() => setState(() {});
 
   Future<void> _loadLastTab() async {
     final idx = await _session.loadLastTabIndex();
@@ -1267,9 +1534,13 @@ class _HomeScaffoldState extends State<HomeScaffold> {
                   feedProvider: _feed,
                   authProvider: widget.auth,
                   closetProvider: _closet,
+                  competitionProvider: _competition,
                 ),
                 ClosetTab(provider: _closet),
-                Center(child: Text('Competitions (Coming soon)', style: Theme.of(context).textTheme.headlineSmall)),
+                CompetitionsTab(
+                  provider: _competition,
+                  authProvider: widget.auth,
+                ),
                 ProfileTab(
                   profile: profile,
                   onEdit: () async {
@@ -1330,12 +1601,14 @@ class FeedTab extends StatefulWidget {
   final FeedProvider feedProvider;
   final AuthProvider authProvider;
   final ClosetProvider closetProvider;
+  final CompetitionProvider competitionProvider;
 
   const FeedTab({
     super.key,
     required this.feedProvider,
     required this.authProvider,
     required this.closetProvider,
+    required this.competitionProvider,
   });
 
   @override
@@ -1362,6 +1635,7 @@ class _FeedTabState extends State<FeedTab> {
     final feedProvider = widget.feedProvider;
     final authProvider = widget.authProvider;
     final closetProvider = widget.closetProvider;
+    final competitionProvider = widget.competitionProvider;
     final currentUser = authProvider.profile!;
 
     return Scaffold(
@@ -1391,6 +1665,7 @@ class _FeedTabState extends State<FeedTab> {
                           return PostCard(
                             post: post,
                             currentUser: currentUser,
+                            competitionProvider: competitionProvider,
                             onLikeToggle: (postId) => feedProvider.toggleLike(postId, currentUser.userId),
                             onDelete: (postId) async {
                               final confirm = await showDialog<bool>(
@@ -1441,7 +1716,7 @@ class _FeedTabState extends State<FeedTab> {
                                       );
                                       if (confirm == true) {
                                         await feedProvider.deletePost(postId);
-                                        Navigator.pop(context); // Pop detail screen
+                                        if (mounted) Navigator.pop(context); // Pop detail screen
                                       }
                                     },
                                   ),
@@ -1478,6 +1753,7 @@ class _FeedTabState extends State<FeedTab> {
 class PostCard extends StatelessWidget {
   final FeedPost post;
   final UserProfile currentUser;
+  final CompetitionProvider competitionProvider;
   final ValueChanged<String> onLikeToggle;
   final ValueChanged<String> onDelete;
   final ValueChanged<FeedPost> onViewDetails;
@@ -1486,6 +1762,7 @@ class PostCard extends StatelessWidget {
     super.key,
     required this.post,
     required this.currentUser,
+    required this.competitionProvider,
     required this.onLikeToggle,
     required this.onDelete,
     required this.onViewDetails,
@@ -1508,6 +1785,41 @@ class PostCard extends StatelessWidget {
     } else {
       return 'just now';
     }
+  }
+
+  void _showPostOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.emoji_events_outlined),
+              title: const Text('Submit to Competition'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await showDialog(
+                  context: context,
+                  builder: (_) => SubmitToCompetitionDialog(
+                    post: post,
+                    provider: competitionProvider,
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(ctx);
+                onDelete(post.id);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1547,26 +1859,7 @@ class PostCard extends StatelessWidget {
                 if (post.userId == currentUser.userId)
                   IconButton(
                     icon: const Icon(Icons.more_vert),
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        builder: (ctx) => SafeArea(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ListTile(
-                                leading: const Icon(Icons.delete, color: Colors.red),
-                                title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
-                                onTap: () {
-                                  Navigator.pop(ctx);
-                                  onDelete(post.id);
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: () => _showPostOptions(context),
                   ),
               ],
             ),
@@ -2097,7 +2390,7 @@ class _ClosetTabState extends State<ClosetTab> {
                           item: item,
                           onEdit: (updated) async {
                             await provider.updateItem(updated);
-                            Navigator.pop(context);
+                            if (mounted) Navigator.pop(context);
                           },
                           onDelete: () async {
                             final confirm = await showDialog<bool>(
@@ -2119,7 +2412,7 @@ class _ClosetTabState extends State<ClosetTab> {
                             );
                             if (confirm == true) {
                               await provider.deleteItem(item.id);
-                              Navigator.pop(context);
+                              if (mounted) Navigator.pop(context);
                             }
                           },
                         ),
@@ -2135,7 +2428,7 @@ class _ClosetTabState extends State<ClosetTab> {
         onPressed: () async {
           final newItem = await Navigator.of(context).push<ClosetItem>(
             MaterialPageRoute(
-              builder: (_) => AddItemScreen(),
+              builder: (_) => const AddItemScreen(),
             ),
           );
           if (newItem != null) {
@@ -2192,10 +2485,10 @@ class _ClosetGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final crossAxisCount = MediaQuery.of(context).size.width > 900
-        ? 3
+        ? 4
         : MediaQuery.of(context).size.width > 600
-            ? 2
-            : 1;
+            ? 3
+            : 2;
     return items.isEmpty
         ? const Center(child: Text('No items found.'))
         : GridView.builder(
@@ -2213,14 +2506,17 @@ class _ClosetGrid extends StatelessWidget {
                 onTap: () => onTap(item),
                 child: Card(
                   elevation: 2,
+                  clipBehavior: Clip.antiAlias,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      ClosetItemImage(
-                        imageBase64: item.imageBase64,
-                        size: 120,
-                        name: item.name,
+                      Expanded(
+                        child: ClosetItemImage(
+                          imageBase64: item.imageBase64,
+                          size: double.infinity,
+                          name: item.name,
+                        ),
                       ),
                       Padding(
                         padding: const EdgeInsets.all(8.0),
@@ -2232,16 +2528,19 @@ class _ClosetGrid extends StatelessWidget {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: kPrimaryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            item.category,
-                            style: const TextStyle(color: kPrimaryColor, fontSize: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0).copyWith(bottom: 8.0),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: kPrimaryColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              item.category,
+                              style: const TextStyle(color: kPrimaryColor, fontSize: 12),
+                            ),
                           ),
                         ),
                       ),
@@ -2255,6 +2554,8 @@ class _ClosetGrid extends StatelessWidget {
 }
 
 class AddItemScreen extends StatefulWidget {
+  const AddItemScreen({super.key});
+
   @override
   State<AddItemScreen> createState() => _AddItemScreenState();
 }
@@ -2684,7 +2985,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
   }
 }
 
-// --- PROFILE TAB (unchanged from Day 2) ---
+// --- PROFILE TAB ---
 
 class ProfileTab extends StatelessWidget {
   final UserProfile profile;
@@ -2902,4 +3203,493 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 }
 
-// --- END OF FILE ---
+// --- COMPETITION SCREENS & WIDGETS ---
+
+class CompetitionsTab extends StatelessWidget {
+  final CompetitionProvider provider;
+  final AuthProvider authProvider;
+
+  const CompetitionsTab({super.key, required this.provider, required this.authProvider});
+
+  @override
+  Widget build(BuildContext context) {
+    if (provider.isLoading) {
+      return const Center(child: CircularProgressIndicator(color: kPrimaryColor));
+    }
+    if (provider.competitions.isEmpty) {
+      return const Center(child: Text('No active competitions right now.'));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: provider.competitions.length,
+      itemBuilder: (context, index) {
+        final competition = provider.competitions[index];
+        return CompetitionCard(
+          competition: competition,
+          participantCount: provider.getParticipantCount(competition.id),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => CompetitionDetailScreen(
+                competition: competition,
+                provider: provider,
+                authProvider: authProvider,
+              ),
+            ));
+          },
+        );
+      },
+    );
+  }
+}
+
+class CompetitionCard extends StatelessWidget {
+  final Competition competition;
+  final int participantCount;
+  final VoidCallback onTap;
+
+  const CompetitionCard({
+    super.key,
+    required this.competition,
+    required this.participantCount,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final timeRemaining = competition.endDate.difference(DateTime.now());
+    final isEnded = timeRemaining.isNegative;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              alignment: Alignment.bottomLeft,
+              children: [
+                Image.network(
+                  competition.coverImageUrl,
+                  height: 150,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (ctx, err, st) => Container(
+                    height: 150,
+                    color: kPrimaryColor.withOpacity(0.2),
+                    child: const Center(child: Icon(Icons.image, color: kPrimaryColor)),
+                  ),
+                ),
+                Container(
+                  height: 150,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Text(
+                    competition.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _InfoChip(
+                    icon: Icons.people,
+                    text: '$participantCount Participants',
+                  ),
+                  _InfoChip(
+                    icon: Icons.timer,
+                    text: isEnded ? 'Ended' : '${timeRemaining.inDays}d left',
+                    color: isEnded ? Colors.red : Colors.green,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color? color;
+
+  const _InfoChip({required this.icon, required this.text, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color ?? Colors.grey[600]),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: TextStyle(color: color ?? Colors.grey[600], fontWeight: FontWeight.w500),
+        ),
+      ],
+    );
+  }
+}
+
+class CompetitionDetailScreen extends StatefulWidget {
+  final Competition competition;
+  final CompetitionProvider provider;
+  final AuthProvider authProvider;
+
+  const CompetitionDetailScreen({
+    super.key,
+    required this.competition,
+    required this.provider,
+    required this.authProvider,
+  });
+
+  @override
+  State<CompetitionDetailScreen> createState() => _CompetitionDetailScreenState();
+}
+
+class _CompetitionDetailScreenState extends State<CompetitionDetailScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUser = widget.authProvider.profile!;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.competition.title),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.photo_library), text: 'Entries'),
+            Tab(icon: Icon(Icons.leaderboard), text: 'Leaderboard'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          EntryGridView(
+            competitionId: widget.competition.id,
+            provider: widget.provider,
+            currentUser: currentUser,
+          ),
+          LeaderboardView(
+            competitionId: widget.competition.id,
+            provider: widget.provider,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class EntryGridView extends StatelessWidget {
+  final String competitionId;
+  final CompetitionProvider provider;
+  final UserProfile currentUser;
+
+  const EntryGridView({
+    super.key,
+    required this.competitionId,
+    required this.provider,
+    required this.currentUser,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = provider.getEntriesForCompetition(competitionId);
+    if (entries.isEmpty) {
+      return const Center(child: Text('No entries yet. Be the first!'));
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 0.75,
+      ),
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        return EntryCard(
+          entry: entry,
+          provider: provider,
+          currentUser: currentUser,
+        );
+      },
+    );
+  }
+}
+
+class EntryCard extends StatelessWidget {
+  final CompetitionEntry entry;
+  final CompetitionProvider provider;
+  final UserProfile currentUser;
+
+  const EntryCard({
+    super.key,
+    required this.entry,
+    required this.provider,
+    required this.currentUser,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final avgRating = provider.getAverageRating(entry.id);
+    final userVote = provider.getUserVote(entry.id, currentUser.userId);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Image.memory(
+              base64Decode(entry.imageData),
+              fit: BoxFit.cover,
+              errorBuilder: (ctx, err, st) => Container(
+                color: Colors.grey[200],
+                child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    AvatarCircle(avatarUrl: entry.userAvatarUrl, initials: entry.username[0].toUpperCase(), radius: 12),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        entry.username,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(Icons.star, color: Colors.amber, size: 16),
+                    Text(avgRating.toStringAsFixed(1)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                StarRating(
+                  initialRating: userVote,
+                  onRated: (rating) {
+                    provider.submitVote(entry.id, currentUser.userId, rating);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class StarRating extends StatefulWidget {
+  final int? initialRating;
+  final ValueChanged<int> onRated;
+
+  const StarRating({super.key, this.initialRating, required this.onRated});
+
+  @override
+  State<StarRating> createState() => _StarRatingState();
+}
+
+class _StarRatingState extends State<StarRating> {
+  late int _rating;
+
+  @override
+  void initState() {
+    super.initState();
+    _rating = widget.initialRating ?? 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(5, (index) {
+        return IconButton(
+          icon: Icon(
+            index < _rating ? Icons.star : Icons.star_border,
+            color: Colors.amber,
+          ),
+          onPressed: () {
+            final newRating = index + 1;
+            setState(() => _rating = newRating);
+            widget.onRated(newRating);
+          },
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        );
+      }),
+    );
+  }
+}
+
+class LeaderboardView extends StatelessWidget {
+  final String competitionId;
+  final CompetitionProvider provider;
+
+  const LeaderboardView({super.key, required this.competitionId, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final leaderboard = provider.getLeaderboard(competitionId);
+    if (leaderboard.isEmpty) {
+      return const Center(child: Text('No rated entries yet.'));
+    }
+    return ListView.builder(
+      itemCount: leaderboard.length,
+      itemBuilder: (context, index) {
+        final item = leaderboard[index];
+        final rank = index + 1;
+        return ListTile(
+          leading: _buildRankBadge(rank),
+          title: Text(item.entry.username),
+          subtitle: Text('${item.voteCount} votes'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.star, color: Colors.amber, size: 20),
+              const SizedBox(width: 4),
+              Text(
+                item.averageRating.toStringAsFixed(2),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRankBadge(int rank) {
+    Color color;
+    IconData? icon;
+    if (rank == 1) {
+      color = Colors.amber;
+      icon = Icons.emoji_events;
+    } else if (rank == 2) {
+      color = Colors.grey[400]!;
+      icon = Icons.emoji_events;
+    } else if (rank == 3) {
+      color = const Color(0xFFCD7F32);
+      icon = Icons.emoji_events;
+    } else {
+      color = kPrimaryColor.withOpacity(0.2);
+    }
+
+    return CircleAvatar(
+      radius: 20,
+      backgroundColor: color,
+      child: icon != null
+          ? Icon(icon, color: Colors.white)
+          : Text(
+              rank.toString(),
+              style: const TextStyle(color: kPrimaryColor, fontWeight: FontWeight.bold),
+            ),
+    );
+  }
+}
+
+class SubmitToCompetitionDialog extends StatelessWidget {
+  final FeedPost post;
+  final CompetitionProvider provider;
+
+  const SubmitToCompetitionDialog({super.key, required this.post, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final activeCompetitions = provider.competitions
+        .where((c) => c.endDate.isAfter(DateTime.now()))
+        .toList();
+
+    if (provider.hasPostBeenSubmitted(post.id)) {
+      return const AlertDialog(
+        title: Text('Already Submitted'),
+        content: Text('This post has already been entered into a competition.'),
+      );
+    }
+
+    return AlertDialog(
+      title: const Text('Submit to a Competition'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: activeCompetitions.isEmpty
+            ? const Text('No active competitions available.')
+            : ListView.builder(
+                shrinkWrap: true,
+                itemCount: activeCompetitions.length,
+                itemBuilder: (context, index) {
+                  final comp = activeCompetitions[index];
+                  final hasEntered = provider.hasUserEntered(comp.id, post.userId);
+                  return ListTile(
+                    title: Text(comp.title),
+                    subtitle: Text(comp.theme),
+                    enabled: !hasEntered,
+                    onTap: () async {
+                      await provider.addEntry(post, comp.id);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Successfully submitted to "${comp.title}"!'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+                    trailing: hasEntered ? const Text('Entered', style: TextStyle(color: Colors.grey)) : null,
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+}
