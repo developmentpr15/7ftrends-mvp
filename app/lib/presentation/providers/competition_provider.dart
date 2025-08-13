@@ -1,0 +1,227 @@
+import 'package:flutter/foundation.dart';
+import '../../services/competition_service.dart';
+import '../../models/competition.dart';
+// import '../../models/competition_entry.dart' as entry_model;
+
+class CompetitionProvider extends ChangeNotifier {
+  final _competitionService = CompetitionService();
+  List<Competition> _competitions = [];
+  List<Map<String, dynamic>> _entries = [];
+  List<Vote> _votes = [];
+
+  bool _isLoading = false;
+  Map<String, int> _participantCounts = {};
+  Map<String, double> _averageRatings = {};
+  Map<String, Map<String, int>> _userVotes = {};
+
+  bool get isLoading => _isLoading;
+  List<Competition> get competitions => List.unmodifiable(_competitions);
+  List<Map<String, dynamic>> get entries => List.unmodifiable(_entries);
+  List<Vote> get votes => List.unmodifiable(_votes);
+
+  int getParticipantCount(String competitionId) {
+    return _participantCounts[competitionId] ?? 0;
+  }
+
+  double getAverageRating(String entryId) {
+    return _averageRatings[entryId] ?? 0.0;
+  }
+
+  int? getUserVote(String entryId, String userId) {
+    return _userVotes[entryId]?[userId];
+  }
+
+  bool hasUserEntered(String competitionId, String userId) {
+    return _entries.any((entry) => 
+      entry['competitionId'] == competitionId && entry['userId'] == userId);
+  }
+
+  bool hasPostBeenSubmitted(String postId) {
+  // Canonical CompetitionEntry does not have postId; always return false or refactor logic
+  return false;
+  }
+
+  Future<void> submitVote(String entryId, String userId, int rating) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _userVotes.putIfAbsent(entryId, () => {})[userId] = rating;
+      _recalculateAverageRating(entryId);
+      // Save to storage
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> addEntry(Map<String, dynamic> post, String competitionId) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final entry = {
+        'id': DateTime.now().toString(),
+        'competitionId': competitionId,
+        'userId': post['userId'],
+        'username': post['username'],
+        'imageData': post['imageData'],
+        'caption': post['caption'],
+        'submittedAt': DateTime.now(),
+        'voteCount': 0,
+      };
+      _entries.add(entry);
+      _updateParticipantCount(competitionId);
+      // Save to storage
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  List<Map<String, dynamic>> getLeaderboard(String competitionId) {
+    final competitionEntries = _entries
+      .where((entry) => entry['competitionId'] == competitionId)
+      .toList();
+
+    competitionEntries.sort((a, b) => 
+      (_averageRatings[b['id']] ?? 0).compareTo(_averageRatings[a['id']] ?? 0));
+
+    return competitionEntries;
+  }
+
+  void _recalculateAverageRating(String entryId) {
+    final votes = _userVotes[entryId]?.values ?? [];
+    if (votes.isEmpty) {
+      _averageRatings[entryId] = 0;
+    } else {
+      _averageRatings[entryId] = votes.reduce((a, b) => a + b) / votes.length;
+    }
+  }
+
+  void _updateParticipantCount(String competitionId) {
+    _participantCounts[competitionId] = _entries
+      .where((entry) => entry['competitionId'] == competitionId)
+      .map((entry) => entry['userId'])
+      .toSet()
+      .length;
+  }
+
+  Future<void> loadAll() async {
+    _competitions = await _competitionService.loadCompetitions();
+  _entries = await _competitionService.loadEntries();
+    _votes = await _competitionService.loadVotes();
+    notifyListeners();
+  }
+
+  Future<void> addCompetition({
+    required String title,
+    required String description,
+    required String theme,
+    required DateTime endDate,
+    required String coverImageUrl,
+  }) async {
+    final competition = Competition(
+      id: DateTime.now().toString(),
+      title: title,
+      description: description,
+      theme: theme,
+      endDate: endDate,
+      coverImageUrl: coverImageUrl,
+    );
+
+    _competitions.add(competition);
+    await _competitionService.saveCompetitions(_competitions);
+    notifyListeners();
+  }
+
+  Future<void> submitEntry({
+    required String competitionId,
+    required String userId,
+    required String username,
+    required String imageData,
+    required String caption,
+  }) async {
+    final entry = {
+      'id': DateTime.now().toString(),
+      'competitionId': competitionId,
+      'userId': userId,
+      'username': username,
+      'imageData': imageData,
+      'caption': caption,
+      'submittedAt': DateTime.now(),
+      'voteCount': 0,
+    };
+    _entries.add(entry);
+    await _competitionService.saveEntries(_entries);
+    notifyListeners();
+  }
+
+  Future<void> vote({
+    required String entryId,
+    required String userId,
+    required int rating,
+  }) async {
+    final existingVoteIndex = _votes.indexWhere(
+      (v) => v.entryId == entryId && v.userId == userId,
+    );
+
+    if (existingVoteIndex != -1) {
+      _votes.removeAt(existingVoteIndex);
+    }
+
+    final vote = Vote(
+      entryId: entryId,
+      userId: userId,
+      rating: rating,
+    );
+
+    _votes.add(vote);
+    await _competitionService.saveVotes(_votes);
+    notifyListeners();
+  }
+
+  Future<void> deleteCompetition(String id) async {
+    _competitions.removeWhere((comp) => comp.id == id);
+  _entries.removeWhere((entry) => entry['competitionId'] == id);
+    _votes.removeWhere((vote) => 
+      _entries.any((entry) => entry['id'] == vote.entryId && entry['competitionId'] == id)
+    );
+
+    await Future.wait([
+      _competitionService.saveCompetitions(_competitions),
+      _competitionService.saveEntries(_entries),
+      _competitionService.saveVotes(_votes),
+    ]);
+    notifyListeners();
+  }
+
+  Future<void> deleteEntry(String id) async {
+  _entries.removeWhere((entry) => entry['id'] == id);
+    _votes.removeWhere((vote) => vote.entryId == id);
+
+    await Future.wait([
+      _competitionService.saveEntries(_entries),
+      _competitionService.saveVotes(_votes),
+    ]);
+    notifyListeners();
+  }
+
+  List<Map<String, dynamic>> getEntriesForCompetition(String competitionId) {
+    return _entries.where((entry) => entry['competitionId'] == competitionId).toList();
+  }
+
+  List<Vote> getVotesForEntry(String entryId) {
+    return _votes.where((vote) => vote.entryId == entryId).toList();
+  }
+
+  double getAverageRatingForEntry(String entryId) {
+    final entryVotes = getVotesForEntry(entryId);
+    if (entryVotes.isEmpty) return 0;
+    return entryVotes.map((v) => v.rating).reduce((a, b) => a + b) / entryVotes.length;
+  }
+
+  bool hasUserVoted(String entryId, String userId) {
+    return _votes.any((vote) => vote.entryId == entryId && vote.userId == userId);
+  }
+}
