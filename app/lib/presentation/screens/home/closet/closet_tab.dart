@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/closet_provider.dart';
 import '../../../../models/closet_item.dart';
 import '../../../../shared/constants.dart';
+import '../../closet/edit_item_screen.dart';
 
 class ClosetTab extends StatelessWidget {
   const ClosetTab({super.key});
@@ -58,7 +59,12 @@ class ClosetTab extends StatelessWidget {
                     clipBehavior: Clip.antiAlias,
                     child: InkWell(
                       onTap: () {
-                        // TODO: Navigate to ItemDetailScreen
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditItemScreen(item: item),
+                          ),
+                        );
                       },
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// import '../../models/feed_post.dart';
+import '../../../models/feed_post_new.dart';
 
 class FeedProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _posts = [];
@@ -32,7 +32,6 @@ class FeedProvider extends ChangeNotifier {
 
   Future<void> loadPosts() async {
     _isLoading = true;
-    notifyListeners();
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -50,12 +49,11 @@ class FeedProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addPost(Map<String, dynamic> post) async {
+  Future<void> addPost(FeedPost post) async {
     _isLoading = true;
-    notifyListeners();
 
     try {
-      _posts.insert(0, post);
+      _posts.insert(0, post.toJson());
       await _savePosts();
     } finally {
       _isLoading = false;
@@ -72,26 +70,25 @@ class FeedProvider extends ChangeNotifier {
     required List<String> hashtags,
     String? closetItemId,
   }) async {
-    final post = {
-      'id': DateTime.now().toString(),
-      'userId': userId,
-      'username': username,
-      'userAvatarUrl': userAvatarUrl,
-      'imageData': imageData,
-      'caption': caption,
-      'hashtags': hashtags,
-      'likes': 0,
-      'likedByMe': false,
-      'createdAt': DateTime.now(),
-      'closetItemId': closetItemId,
-    };
+    final post = FeedPost(
+      id: DateTime.now().toString(),
+      userId: userId,
+      username: username,
+      userAvatarUrl: userAvatarUrl,
+      imageData: imageData,
+      caption: caption,
+      hashtags: hashtags,
+      likes: 0,
+      likedByMe: false,
+      createdAt: DateTime.now(),
+      closetItemId: closetItemId,
+    );
 
     await addPost(post);
   }
 
   Future<void> toggleLike(String postId, String userId) async {
     _isLoading = true;
-    notifyListeners();
 
     try {
       final postIndex = _posts.indexWhere((p) => p['id'] == postId);
@@ -112,7 +109,6 @@ class FeedProvider extends ChangeNotifier {
 
   Future<void> deletePost(String postId) async {
     _isLoading = true;
-    notifyListeners();
 
     try {
   _posts.removeWhere((p) => p['id'] == postId);
@@ -125,7 +121,6 @@ class FeedProvider extends ChangeNotifier {
 
   Future<void> updatePost(Map<String, dynamic> post) async {
     _isLoading = true;
-    notifyListeners();
 
     try {
       final index = _posts.indexWhere((p) => p['id'] == post['id']);

@@ -10,6 +10,7 @@ import '../feed/feed_tab.dart';
 import '../closet_tab.dart';
 import '../competition_tab.dart';
 import '../profile_tab.dart';
+import '../profile/profile_edit_screen.dart';
 
 class HomeScaffold extends StatefulWidget {
   final AuthProvider auth;

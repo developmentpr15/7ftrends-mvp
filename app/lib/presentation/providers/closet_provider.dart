@@ -42,7 +42,6 @@ class ClosetProvider extends ChangeNotifier {
 
   Future<void> loadItems() async {
     _isLoading = true;
-    notifyListeners();
 
     try {
       _items = await _closetService.loadClosetItems();
@@ -62,25 +61,11 @@ class ClosetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addItem(String name, String category, String color, String brand, XFile imageFile, List<String> tags) async {
+  Future<void> addItem(ClosetItem item) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final bytes = await imageFile.readAsBytes();
-      final base64Image = base64Encode(bytes);
-      
-      final item = ClosetItem(
-        id: DateTime.now().toString(),
-        name: name,
-        category: category,
-        color: color,
-        brand: brand,
-        imageBase64: base64Image,
-        createdAt: DateTime.now(),
-        tags: tags,
-      );
-
       _items.add(item);
       await _closetService.saveClosetItems(_items);
     } finally {

@@ -11,4 +11,9 @@ const kCategories = [
   ClosetCategory('Shoes', Icons.directions_walk),
   ClosetCategory('Accessories', Icons.watch),
   ClosetCategory('Outerwear', Icons.ac_unit),
+  ClosetCategory('Activewear', Icons.fitness_center),
+  ClosetCategory('Swimwear', Icons.pool),
+  ClosetCategory('Underwear', Icons.accessibility_new),
+  ClosetCategory('Sleepwear', Icons.king_bed),
+  ClosetCategory('Formal', Icons.people),
 ];
