@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/competition.dart';
+import '../models/competition_entry.dart';
 
 class CompetitionService {
   static const _competitionsKey = 'competitions';
@@ -22,17 +23,18 @@ class CompetitionService {
     await prefs.setStringList(_competitionsKey, competitionsJson);
   }
 
-  Future<List<Map<String, dynamic>>> loadEntries() async {
+  Future<List<CompetitionEntry>> loadEntries() async {
     final prefs = await SharedPreferences.getInstance();
     final entriesJson = prefs.getStringList(_entriesKey) ?? [];
     return entriesJson
-        .map((json) => jsonDecode(json) as Map<String, dynamic>)
+        .map((json) => CompetitionEntry.fromJson(jsonDecode(json)))
         .toList();
   }
 
-  Future<void> saveEntries(List<Map<String, dynamic>> entries) async {
+  Future<void> saveEntries(List<CompetitionEntry> entries) async {
     final prefs = await SharedPreferences.getInstance();
-    final entriesJson = entries.map((entry) => jsonEncode(entry)).toList();
+    final entriesJson =
+        entries.map((entry) => jsonEncode(entry.toJson())).toList();
     await prefs.setStringList(_entriesKey, entriesJson);
   }
 

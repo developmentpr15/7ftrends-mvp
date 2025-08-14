@@ -1,12 +1,14 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
+import '../../models/competition_entry.dart';
 import '../../services/competition_service.dart';
 import '../../models/competition.dart';
-// import '../../models/competition_entry.dart' as entry_model;
 
 class CompetitionProvider extends ChangeNotifier {
   final _competitionService = CompetitionService();
   List<Competition> _competitions = [];
-  List<Map<String, dynamic>> _entries = [];
+  List<CompetitionEntry> _entries = [];
   List<Vote> _votes = [];
 
   bool _isLoading = false;
@@ -16,7 +18,7 @@ class CompetitionProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   List<Competition> get competitions => List.unmodifiable(_competitions);
-  List<Map<String, dynamic>> get entries => List.unmodifiable(_entries);
+  List<CompetitionEntry> get entries => List.unmodifiable(_entries);
   List<Vote> get votes => List.unmodifiable(_votes);
 
   int getParticipantCount(String competitionId) {
@@ -32,13 +34,12 @@ class CompetitionProvider extends ChangeNotifier {
   }
 
   bool hasUserEntered(String competitionId, String userId) {
-    return _entries.any((entry) => 
-      entry['competitionId'] == competitionId && entry['userId'] == userId);
+    return _entries.any((entry) =>
+        entry.competitionId == competitionId && entry.userId == userId);
   }
 
   bool hasPostBeenSubmitted(String postId) {
-  // Canonical CompetitionEntry does not have postId; always return false or refactor logic
-  return false;
+    return false;
   }
 
   Future<void> submitVote(String entryId, String userId, int rating) async {
@@ -55,37 +56,26 @@ class CompetitionProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addEntry(Map<String, dynamic> post, String competitionId) async {
+  Future<void> addEntry(CompetitionEntry entry) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final entry = {
-        'id': DateTime.now().toString(),
-        'competitionId': competitionId,
-        'userId': post['userId'],
-        'username': post['username'],
-        'imageData': post['imageData'],
-        'caption': post['caption'],
-        'submittedAt': DateTime.now(),
-        'voteCount': 0,
-      };
       _entries.add(entry);
-      _updateParticipantCount(competitionId);
-      // Save to storage
+      _updateParticipantCount(entry.competitionId);
+      await _competitionService.saveEntries(_entries);
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  List<Map<String, dynamic>> getLeaderboard(String competitionId) {
-    final competitionEntries = _entries
-      .where((entry) => entry['competitionId'] == competitionId)
-      .toList();
+  List<CompetitionEntry> getLeaderboard(String competitionId) {
+    final competitionEntries =
+        _entries.where((entry) => entry.competitionId == competitionId).toList();
 
-    competitionEntries.sort((a, b) => 
-      (_averageRatings[b['id']] ?? 0).compareTo(_averageRatings[a['id']] ?? 0));
+    competitionEntries.sort((a, b) =>
+        (_averageRatings[b.id] ?? 0).compareTo(_averageRatings[a.id] ?? 0));
 
     return competitionEntries;
   }
@@ -101,15 +91,15 @@ class CompetitionProvider extends ChangeNotifier {
 
   void _updateParticipantCount(String competitionId) {
     _participantCounts[competitionId] = _entries
-      .where((entry) => entry['competitionId'] == competitionId)
-      .map((entry) => entry['userId'])
-      .toSet()
-      .length;
+        .where((entry) => entry.competitionId == competitionId)
+        .map((entry) => entry.userId)
+        .toSet()
+        .length;
   }
 
   Future<void> loadAll() async {
     _competitions = await _competitionService.loadCompetitions();
-  _entries = await _competitionService.loadEntries();
+    _entries = await _competitionService.loadEntries();
     _votes = await _competitionService.loadVotes();
     notifyListeners();
   }
@@ -139,19 +129,18 @@ class CompetitionProvider extends ChangeNotifier {
     required String competitionId,
     required String userId,
     required String username,
-    required String imageData,
+    required Uint8List imageData,
     required String caption,
   }) async {
-    final entry = {
-      'id': DateTime.now().toString(),
-      'competitionId': competitionId,
-      'userId': userId,
-      'username': username,
-      'imageData': imageData,
-      'caption': caption,
-      'submittedAt': DateTime.now(),
-      'voteCount': 0,
-    };
+    final entry = CompetitionEntry(
+      id: DateTime.now().toString(),
+      competitionId: competitionId,
+      userId: userId,
+      username: username,
+      imageData: imageData,
+      caption: caption,
+      submittedAt: DateTime.now(),
+    );
     _entries.add(entry);
     await _competitionService.saveEntries(_entries);
     notifyListeners();
@@ -183,10 +172,9 @@ class CompetitionProvider extends ChangeNotifier {
 
   Future<void> deleteCompetition(String id) async {
     _competitions.removeWhere((comp) => comp.id == id);
-  _entries.removeWhere((entry) => entry['competitionId'] == id);
-    _votes.removeWhere((vote) => 
-      _entries.any((entry) => entry['id'] == vote.entryId && entry['competitionId'] == id)
-    );
+    _entries.removeWhere((entry) => entry.competitionId == id);
+    _votes.removeWhere((vote) =>
+        _entries.any((entry) => entry.id == vote.entryId && entry.competitionId == id));
 
     await Future.wait([
       _competitionService.saveCompetitions(_competitions),
@@ -197,7 +185,7 @@ class CompetitionProvider extends ChangeNotifier {
   }
 
   Future<void> deleteEntry(String id) async {
-  _entries.removeWhere((entry) => entry['id'] == id);
+    _entries.removeWhere((entry) => entry.id == id);
     _votes.removeWhere((vote) => vote.entryId == id);
 
     await Future.wait([
@@ -207,8 +195,8 @@ class CompetitionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<Map<String, dynamic>> getEntriesForCompetition(String competitionId) {
-    return _entries.where((entry) => entry['competitionId'] == competitionId).toList();
+  List<CompetitionEntry> getEntriesForCompetition(String competitionId) {
+    return _entries.where((entry) => entry.competitionId == competitionId).toList();
   }
 
   List<Vote> getVotesForEntry(String entryId) {
