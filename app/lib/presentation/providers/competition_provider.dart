@@ -13,8 +13,6 @@ class CompetitionProvider extends ChangeNotifier {
 
   bool _isLoading = false;
   Map<String, int> _participantCounts = {};
-  Map<String, double> _averageRatings = {};
-  Map<String, Map<String, int>> _userVotes = {};
 
   bool get isLoading => _isLoading;
   List<Competition> get competitions => List.unmodifiable(_competitions);
@@ -25,14 +23,6 @@ class CompetitionProvider extends ChangeNotifier {
     return _participantCounts[competitionId] ?? 0;
   }
 
-  double getAverageRating(String entryId) {
-    return _averageRatings[entryId] ?? 0.0;
-  }
-
-  int? getUserVote(String entryId, String userId) {
-    return _userVotes[entryId]?[userId];
-  }
-
   bool hasUserEntered(String competitionId, String userId) {
     return _entries.any((entry) =>
         entry.competitionId == competitionId && entry.userId == userId);
@@ -40,20 +30,6 @@ class CompetitionProvider extends ChangeNotifier {
 
   bool hasPostBeenSubmitted(String postId) {
     return false;
-  }
-
-  Future<void> submitVote(String entryId, String userId, int rating) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      _userVotes.putIfAbsent(entryId, () => {})[userId] = rating;
-      _recalculateAverageRating(entryId);
-      // Save to storage
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
   Future<void> addEntry(CompetitionEntry entry) async {
@@ -75,18 +51,9 @@ class CompetitionProvider extends ChangeNotifier {
         _entries.where((entry) => entry.competitionId == competitionId).toList();
 
     competitionEntries.sort((a, b) =>
-        (_averageRatings[b.id] ?? 0).compareTo(_averageRatings[a.id] ?? 0));
+        getAverageRatingForEntry(b.id).compareTo(getAverageRatingForEntry(a.id)));
 
     return competitionEntries;
-  }
-
-  void _recalculateAverageRating(String entryId) {
-    final votes = _userVotes[entryId]?.values ?? [];
-    if (votes.isEmpty) {
-      _averageRatings[entryId] = 0;
-    } else {
-      _averageRatings[entryId] = votes.reduce((a, b) => a + b) / votes.length;
-    }
   }
 
   void _updateParticipantCount(String competitionId) {

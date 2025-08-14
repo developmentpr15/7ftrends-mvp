@@ -5,6 +5,8 @@ import '../../../models/competition.dart';
 import '../../../models/competition_entry.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/competition_provider.dart';
+import '../../widgets/vote_dialog.dart';
+import 'leaderboard_screen.dart';
 import 'submit_entry_dialog.dart';
 
 class CompetitionDetailScreen extends StatelessWidget {
@@ -28,6 +30,20 @@ class CompetitionDetailScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(competition.title),
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      LeaderboardScreen(competitionId: competition.id),
+                ),
+              );
+            },
+            icon: const Icon(Icons.leaderboard),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -114,42 +130,56 @@ class CompetitionDetailScreen extends StatelessWidget {
                           itemCount: entries.length,
                           itemBuilder: (context, index) {
                             final entry = entries[index];
-                            return Card(
-                              clipBehavior: Clip.antiAlias,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Expanded(
-                                    child: Image.memory(
-                                      entry.imageData,
-                                      fit: BoxFit.cover,
+                            final hasVoted = competitionProvider.hasUserVoted(
+                                entry.id, authProvider.profile!['userId']!);
+                            return GestureDetector(
+                              onTap: () {
+                                if (!hasVoted) {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) =>
+                                        VoteDialog(entryId: entry.id),
+                                  );
+                                }
+                              },
+                              child: Card(
+                                clipBehavior: Clip.antiAlias,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Expanded(
+                                      child: Image.memory(
+                                        entry.imageData,
+                                        fit: BoxFit.cover,
+                                      ),
                                     ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          entry.caption,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
+                                    Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            entry.caption,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'by ${entry.username}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
-                                        ),
-                                      ],
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'by ${entry.username}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             );
                           },
@@ -174,7 +204,8 @@ class CompetitionDetailScreen extends StatelessWidget {
                   );
                 }
               : null,
-          child: Text(hasUserEntered ? 'Already Entered' : 'Join / Submit Entry'),
+          child:
+              Text(hasUserEntered ? 'Already Entered' : 'Join / Submit Entry'),
         ),
       ),
     );
