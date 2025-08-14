@@ -14,6 +14,10 @@ class CompetitionProvider extends ChangeNotifier {
   bool _isLoading = false;
   Map<String, int> _participantCounts = {};
 
+  CompetitionProvider() {
+    loadAll();
+  }
+
   bool get isLoading => _isLoading;
   List<Competition> get competitions => List.unmodifiable(_competitions);
   List<CompetitionEntry> get entries => List.unmodifiable(_entries);
