@@ -33,7 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await Future.wait([
       Provider.of<FeedProvider>(context, listen: false).loadPosts(),
       Provider.of<ClosetProvider>(context, listen: false).loadItems(),
-      Provider.of<CompetitionProvider>(context, listen: false).loadAll(),
     ]);
   }
 

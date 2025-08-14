@@ -1,0 +1,4 @@
+enum CompetitionStatus {
+  active,
+  ended,
+}

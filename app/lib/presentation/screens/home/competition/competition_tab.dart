@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../models/competition_entry.dart';
 import '../../../providers/competition_provider.dart';
 import '../../../../shared/constants.dart';
+import '../competitions/competition_detail_screen.dart';
 
 class CompetitionTab extends StatelessWidget {
   const CompetitionTab({super.key});
@@ -21,15 +23,23 @@ class CompetitionTab extends StatelessWidget {
           itemCount: provider.competitions.length,
           itemBuilder: (context, index) {
             final competition = provider.competitions[index];
-            final entries = provider.getEntriesForCompetition(competition.id);
-            final daysLeft = competition.endDate.difference(DateTime.now()).inDays;
+            final List<CompetitionEntry> entries =
+                provider.getEntriesForCompetition(competition.id);
+            final daysLeft =
+                competition.endDate.difference(DateTime.now()).inDays;
 
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: () {
-                  // TODO: Navigate to competition detail screen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          CompetitionDetailScreen(competition: competition),
+                    ),
+                  );
                 },
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,7 +112,7 @@ class CompetitionTab extends StatelessWidget {
                                     const SizedBox(width: 8),
                                 itemBuilder: (context, index) {
                                   final entry = entries[index];
-                                  final rating = provider.getAverageRatingForEntry(entry['id']);
+                                  final rating = provider.getAverageRatingForEntry(entry.id);
                                   return SizedBox(
                                     width: 80,
                                     child: Column(
@@ -110,7 +120,7 @@ class CompetitionTab extends StatelessWidget {
                                         ClipRRect(
                                           borderRadius: BorderRadius.circular(4),
                                           child: Image.memory(
-                                            base64Decode(entry['imageData'] ?? ''),
+                                            entry.imageData,
                                             height: 60,
                                             width: 80,
                                             fit: BoxFit.cover,
