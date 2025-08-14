@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../models/competition_entry.dart';
 import '../../../providers/competition_provider.dart';
 import '../../../../shared/constants.dart';
 import '../competitions/competition_detail_screen.dart';
@@ -22,7 +23,8 @@ class CompetitionTab extends StatelessWidget {
           itemCount: provider.competitions.length,
           itemBuilder: (context, index) {
             final competition = provider.competitions[index];
-            final entries = provider.getEntriesForCompetition(competition.id);
+            final List<CompetitionEntry> entries =
+                provider.getEntriesForCompetition(competition.id);
             final daysLeft =
                 competition.endDate.difference(DateTime.now()).inDays;
 
