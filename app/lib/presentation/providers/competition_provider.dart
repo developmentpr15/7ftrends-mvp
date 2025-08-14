@@ -131,6 +131,7 @@ class CompetitionProvider extends ChangeNotifier {
     required String username,
     required Uint8List imageData,
     required String caption,
+    required String feedPostId,
   }) async {
     final entry = CompetitionEntry(
       id: DateTime.now().toString(),
@@ -140,6 +141,7 @@ class CompetitionProvider extends ChangeNotifier {
       imageData: imageData,
       caption: caption,
       submittedAt: DateTime.now(),
+      feedPostId: feedPostId,
     );
     _entries.add(entry);
     await _competitionService.saveEntries(_entries);

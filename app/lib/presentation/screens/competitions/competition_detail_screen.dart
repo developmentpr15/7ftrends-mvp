@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../models/competition.dart';
 import '../../../models/competition_entry.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/competition_provider.dart';
+import 'submit_entry_dialog.dart';
 
 class CompetitionDetailScreen extends StatelessWidget {
   final Competition competition;
@@ -15,10 +17,13 @@ class CompetitionDetailScreen extends StatelessWidget {
     final timeRemaining = competition.endDate.difference(DateTime.now());
     final isCompetitionActive = timeRemaining.isNegative == false;
     final competitionProvider = Provider.of<CompetitionProvider>(context);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final participantCount =
         competitionProvider.getParticipantCount(competition.id);
     final List<CompetitionEntry> entries =
         competitionProvider.getEntriesForCompetition(competition.id);
+    final hasUserEntered = competitionProvider.hasUserEntered(
+        competition.id, authProvider.profile!['userId']!);
 
     return Scaffold(
       appBar: AppBar(
@@ -159,8 +164,17 @@ class CompetitionDetailScreen extends StatelessWidget {
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(16.0),
         child: FilledButton(
-          onPressed: isCompetitionActive ? () {} : null,
-          child: const Text('Join / Submit Entry'),
+          onPressed: isCompetitionActive && !hasUserEntered
+              ? () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => SubmitEntryDialog(
+                      competitionId: competition.id,
+                    ),
+                  );
+                }
+              : null,
+          child: Text(hasUserEntered ? 'Already Entered' : 'Join / Submit Entry'),
         ),
       ),
     );

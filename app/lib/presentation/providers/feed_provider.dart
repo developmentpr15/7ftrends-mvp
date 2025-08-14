@@ -30,6 +30,10 @@ class FeedProvider extends ChangeNotifier {
     }).toList();
   }
 
+  List<Map<String, dynamic>> getPostsForUser(String userId) {
+    return _posts.where((post) => post['userId'] == userId).toList();
+  }
+
   Future<void> loadPosts() async {
     _isLoading = true;
 

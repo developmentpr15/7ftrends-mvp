@@ -9,6 +9,7 @@ class CompetitionEntry {
   final Uint8List imageData;
   final String caption;
   final DateTime submittedAt;
+  final String? feedPostId;
   double? averageRating;
   int voteCount;
 
@@ -20,6 +21,7 @@ class CompetitionEntry {
     required this.imageData,
     required this.caption,
     required this.submittedAt,
+    this.feedPostId,
     this.averageRating,
     this.voteCount = 0,
   });
@@ -33,6 +35,7 @@ class CompetitionEntry {
       imageData: base64Decode(json['imageData']),
       caption: json['caption'],
       submittedAt: DateTime.parse(json['submittedAt']),
+      feedPostId: json['feedPostId'],
       averageRating: json['averageRating']?.toDouble(),
       voteCount: json['voteCount'] ?? 0,
     );
@@ -47,6 +50,7 @@ class CompetitionEntry {
       'imageData': base64Encode(imageData),
       'caption': caption,
       'submittedAt': submittedAt.toIso8601String(),
+      'feedPostId': feedPostId,
       'averageRating': averageRating,
       'voteCount': voteCount,
     };
