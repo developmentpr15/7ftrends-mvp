@@ -1,3 +1,5 @@
+import 'competition_status.dart';
+
 class Competition {
   final String id;
   final String title;
@@ -14,6 +16,9 @@ class Competition {
     required this.endDate,
     required this.coverImageUrl,
   });
+
+  CompetitionStatus get status =>
+      DateTime.now().isAfter(endDate) ? CompetitionStatus.ended : CompetitionStatus.active;
 
   factory Competition.fromJson(Map<String, dynamic> json) {
     return Competition(

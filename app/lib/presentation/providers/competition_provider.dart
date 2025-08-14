@@ -56,6 +56,29 @@ class CompetitionProvider extends ChangeNotifier {
     return competitionEntries;
   }
 
+  List<CompetitionEntry> getWinners(String competitionId) {
+    final leaderboard = getLeaderboard(competitionId);
+    if (leaderboard.isEmpty) {
+      return [];
+    }
+
+    final winners = <CompetitionEntry>[];
+    for (int i = 0; i < leaderboard.length && i < 3; i++) {
+      winners.add(leaderboard[i]);
+    }
+
+    if (leaderboard.length > 3) {
+      final thirdPlaceRating = getAverageRatingForEntry(leaderboard[2].id);
+      for (int i = 3; i < leaderboard.length; i++) {
+        if (getAverageRatingForEntry(leaderboard[i].id) == thirdPlaceRating) {
+          winners.add(leaderboard[i]);
+        }
+      }
+    }
+
+    return winners;
+  }
+
   void _updateParticipantCount(String competitionId) {
     _participantCounts[competitionId] = _entries
         .where((entry) => entry.competitionId == competitionId)

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../models/competition.dart';
 import '../../../models/competition_entry.dart';
+import '../../../models/competition_status.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/competition_provider.dart';
 import '../../widgets/vote_dialog.dart';
@@ -16,16 +17,16 @@ class CompetitionDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeRemaining = competition.endDate.difference(DateTime.now());
-    final isCompetitionActive = timeRemaining.isNegative == false;
     final competitionProvider = Provider.of<CompetitionProvider>(context);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final isCompetitionActive = competition.status == CompetitionStatus.active;
     final participantCount =
         competitionProvider.getParticipantCount(competition.id);
     final List<CompetitionEntry> entries =
         competitionProvider.getEntriesForCompetition(competition.id);
     final hasUserEntered = competitionProvider.hasUserEntered(
         competition.id, authProvider.profile!['userId']!);
+    final winners = competitionProvider.getWinners(competition.id);
 
     return Scaffold(
       appBar: AppBar(
@@ -49,6 +50,7 @@ class CompetitionDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildStatusBanner(context, competition.status),
             Image.memory(
               base64Decode(competition.coverImageUrl),
               width: double.infinity,
@@ -72,41 +74,9 @@ class CompetitionDetailScreen extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 16),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildInfoColumn(
-                            context,
-                            Icons.timer,
-                            'Time Remaining',
-                            isCompetitionActive
-                                ? '${timeRemaining.inDays}d ${timeRemaining.inHours % 24}h'
-                                : 'Ended',
-                          ),
-                          _buildInfoColumn(
-                            context,
-                            Icons.people,
-                            'Participants',
-                            participantCount.toString(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Rules',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '1. All entries must be original work.\n'
-                    '2. Submissions must adhere to the competition theme.\n'
-                    '3. No late submissions will be accepted.',
-                  ),
+                  if (competition.status == CompetitionStatus.ended &&
+                      winners.isNotEmpty)
+                    _buildWinnersSection(context, winners),
                   const SizedBox(height: 24),
                   Text(
                     'Entries',
@@ -134,7 +104,7 @@ class CompetitionDetailScreen extends StatelessWidget {
                                 entry.id, authProvider.profile!['userId']!);
                             return GestureDetector(
                               onTap: () {
-                                if (!hasVoted) {
+                                if (isCompetitionActive && !hasVoted) {
                                   showDialog(
                                     context: context,
                                     builder: (context) =>
@@ -211,20 +181,64 @@ class CompetitionDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoColumn(
-      BuildContext context, IconData icon, String title, String subtitle) {
-    return Column(
-      children: [
-        Icon(icon, color: Theme.of(context).primaryColor),
-        const SizedBox(height: 8),
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleMedium,
+  Widget _buildStatusBanner(
+      BuildContext context, CompetitionStatus status) {
+    return Container(
+      width: double.infinity,
+      color: status == CompetitionStatus.active ? Colors.green : Colors.red,
+      padding: const EdgeInsets.all(8.0),
+      child: Text(
+        'Status: ${status.name.toUpperCase()}',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
         ),
-        const SizedBox(height: 4),
+      ),
+    );
+  }
+
+  Widget _buildWinnersSection(
+      BuildContext context, List<CompetitionEntry> winners) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Text(
-          subtitle,
-          style: Theme.of(context).textTheme.titleSmall,
+          'Winners',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 120,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: winners.length,
+            itemBuilder: (context, index) {
+              final winner = winners[index];
+              return SizedBox(
+                width: 100,
+                child: Card(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Image.memory(
+                          winner.imageData,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Text(
+                          winner.username,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ],
     );

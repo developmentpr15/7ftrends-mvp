@@ -16,6 +16,7 @@ class LeaderboardScreen extends StatelessWidget {
       body: Consumer<CompetitionProvider>(
         builder: (context, provider, child) {
           final leaderboard = provider.getLeaderboard(competitionId);
+          final winners = provider.getWinners(competitionId);
 
           if (leaderboard.isEmpty) {
             return const Center(
@@ -30,12 +31,22 @@ class LeaderboardScreen extends StatelessWidget {
               final rank = index + 1;
               final averageRating = provider.getAverageRatingForEntry(entry.id);
               final totalVotes = provider.getVotesForEntry(entry.id).length;
+              final isWinner = winners.any((winner) => winner.id == entry.id);
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
                   leading: _buildRankIcon(rank),
-                  title: Text(entry.username),
+                  title: Row(
+                    children: [
+                      Text(entry.username),
+                      if (isWinner)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: Icon(Icons.verified, color: Colors.blue),
+                        ),
+                    ],
+                  ),
                   subtitle: Text('Votes: $totalVotes'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
