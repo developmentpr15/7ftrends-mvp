@@ -184,6 +184,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // TODO: Implement Google OAuth login
+                    },
+                    icon: const Icon(Icons.login),
+                    label: const Text('Login with Google'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor: const Color(0xFF4285F4),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
                 ],
               ),
             ),
