@@ -1,0 +1,6 @@
+endpoint: "http://localhost:8080"
+
+databases:
+  default:
+   kind: postgres
+   connection_string: "postgresql://postgres:Postgress@854321@db.cfukdfkoxoymhqnthrnv.supabase.co:5432/postgres"

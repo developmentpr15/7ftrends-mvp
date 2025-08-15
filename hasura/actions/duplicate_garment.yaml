@@ -1,0 +1,14 @@
+type: action
+version: 3
+name: duplicateGarment
+definition:
+  handler: "http://localhost:3000/duplicate-garment"
+  kind: synchronous
+  arguments:
+    - name: garment_id
+      type: uuid
+  output_type: uuid
+permissions:
+  - role: user
+    permission:
+      allow: true

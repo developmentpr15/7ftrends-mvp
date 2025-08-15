@@ -57,3 +57,31 @@ jobs:
           curl -X POST https://api.nhost.io/v1/deploy \
             -H "Authorization: Bearer $NHOST_AUTH_TOKEN" \
             -F source=@build/web
+
+  test:
+    name: Run Flutter Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: stable
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Check if /test folder exists
+        id: check_test_folder
+        run: |
+          if [ -d "test" ]; then
+            echo "exists=true" >> $GITHUB_ENV
+          else
+            echo "exists=false" >> $GITHUB_ENV
+          fi
+
+      - name: Run tests
+        if: env.exists == 'true'
+        run: flutter test
