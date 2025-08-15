@@ -1,212 +1,191 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'dart:convert';
-import 'package:image_picker/image_picker.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'presentation/providers/auth_provider.dart';
-import 'presentation/providers/avatar_provider.dart';
-import 'presentation/providers/closet_provider.dart';
-import 'presentation/providers/feed_provider.dart';
-import 'presentation/providers/competition_provider.dart';
-import 'presentation/screens/splash_screen.dart';
-import 'shared/constants.dart';
-import 'models/user_profile.dart';
-import 'data/models/feed_post.dart';
-import 'models/closet_item.dart';
-import 'models/competition.dart';
+// Services
+class LocalSessionService {
+  static const _kIsLoggedIn = 'isLoggedIn';
+  static const _kEmail = 'email';
 
-// Only import once to avoid ambiguity
-import 'services/local_session_service.dart';
+  Future<void> setLoggedIn(String email) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool(_kIsLoggedIn, true);
+    await sp.setString(_kEmail, email);
+  }
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
+  Future<void> clear() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.remove(_kIsLoggedIn);
+    await sp.remove(_kEmail);
+  }
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AvatarProvider()..load()),
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ClosetProvider()),
-        ChangeNotifierProvider(create: (_) => FeedProvider()),
-        ChangeNotifierProvider(create: (_) => CompetitionProvider()),
-      ],
-      child: const SevenFTrendsApp(),
-    ),
-  );
-}
+  Future<bool> isLoggedIn() async {
+    final sp = await SharedPreferences.getInstance();
+    return sp.getBool(_kIsLoggedIn) ?? false;
+  }
 
-class SevenFTrendsApp extends StatelessWidget {
-  const SevenFTrendsApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: '7ftrends',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.purple,
-        primaryColor: kPrimaryColor,
-        colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.purple)
-            .copyWith(secondary: kPrimaryColor),
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: kPrimaryColor,
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: kPrimaryColor,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: kPrimaryColor),
-          ),
-        ),
-      ),
-      home: const SplashScreen(),
-    );
+  Future<String?> getEmail() async {
+    final sp = await SharedPreferences.getInstance();
+    return sp.getString(_kEmail);
   }
 }
 
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+// Auth Provider
+class AuthProvider extends ChangeNotifier {
+  final LocalSessionService _session;
+  bool _loading = false;
+  bool _isLoggedIn = false;
+  String? _email;
 
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: Provider.of<AuthProvider>(context, listen: false).loadSession(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator(color: kPrimaryColor)),
-          );
-        }
-        return Consumer<AuthProvider>(
-          builder: (context, auth, child) {
-            if (auth.profile == null) {
-              return const AuthScreen();
-            }
-            return const HomeScaffold();
-          },
-        );
-      },
-    );
+  AuthProvider(this._session);
+
+  bool get loading => _loading;
+  bool get isLoggedIn => _isLoggedIn;
+  String? get email => _email;
+
+  Future<void> restore() async {
+    _loading = true;
+    notifyListeners();
+    _isLoggedIn = await _session.isLoggedIn();
+    _email = await _session.getEmail();
+    _loading = false;
+    notifyListeners();
+  }
+
+  Future<String?> login(String email, String password) async {
+    _loading = true;
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (password.length < 6) {
+      _loading = false;
+      notifyListeners();
+      return 'Invalid credentials';
+    }
+    await _session.setLoggedIn(email);
+    _isLoggedIn = true;
+    _email = email;
+    _loading = false;
+    notifyListeners();
+    return null;
+  }
+
+  Future<String?> signup(String email, String password) async {
+    return login(email, password);
+  }
+
+  Future<void> logout() async {
+    _loading = true;
+    notifyListeners();
+    await _session.clear();
+    _isLoggedIn = false;
+    _email = null;
+    _loading = false;
+    notifyListeners();
   }
 }
 
-class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+// Validators
+class Validators {
+  static String? email(String? v) {
+    final s = v?.trim() ?? '';
+    if (s.isEmpty) return 'Email is required';
+    if (!s.contains('@') || !s.contains('.')) return 'Enter a valid email';
+    return null;
+  }
 
-  @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  static String? password(String? v) {
+    final s = v ?? '';
+    if (s.isEmpty) return 'Password is required';
+    if (s.length < 6) return 'Min 6 characters';
+    return null;
+  }
 }
 
-enum AuthMode { login, signup }
+// Login Screen
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
 
-class _AuthScreenState extends State<AuthScreen> {
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  AuthMode _mode = AuthMode.login;
-  String _email = '';
-  String _password = '';
-  String _username = '';
-  String? _error;
+  final _email = TextEditingController();
+  final _password = TextEditingController();
 
-  void _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _error = null);
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    try {
-      if (_mode == AuthMode.login) {
-        await auth.login(_email.trim(), _password);
-      } else {
-        await auth.signup(_email.trim(), _password, _username.trim());
-      }
-    } catch (e) {
-      setState(() => _error = 'Something went wrong');
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final auth = context.read<AuthProvider>();
+    final err = await auth.login(_email.text.trim(), _password.text);
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    final isLoading = auth.isLoading;
+    final loading = context.watch<AuthProvider>().loading;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_mode == AuthMode.login ? 'Sign In' : 'Sign Up'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Sign In')),
       body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(_error!, style: const TextStyle(color: Colors.red)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _email,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    validator: Validators.email,
+                    textInputAction: TextInputAction.next,
                   ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  keyboardType: TextInputType.emailAddress,
-                  enabled: !isLoading,
-                  validator: (v) => v != null && v.contains('@') ? null : 'Enter a valid email',
-                  onChanged: (v) => _email = v,
-                ),
-                const SizedBox(height: 16),
-                if (_mode == AuthMode.signup)
-                  Column(
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _password,
+                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: true,
+                    validator: Validators.password,
+                    onFieldSubmitted: (_) => _submit(),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: loading ? null : _submit,
+                      child: Text(loading ? 'Signing in…' : 'Login'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      TextFormField(
-                        decoration: const InputDecoration(labelText: 'Username'),
-                        enabled: !isLoading,
-                        validator: (v) => validateUsername(v),
-                        onChanged: (v) => _username = v,
+                      TextButton(
+                        onPressed: () => context.push('/signup'),
+                        child: const Text('Create account'),
                       ),
-                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: () => context.push('/forgot-password'),
+                        child: const Text('Forgot password?'),
+                      ),
                     ],
                   ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Password'),
-                  obscureText: true,
-                  enabled: !isLoading,
-                  validator: (v) => v != null && v.length >= 6 ? null : 'Min 6 characters',
-                  onChanged: (v) => _password = v,
-                ),
-                const SizedBox(height: 24),
-                isLoading
-                    ? const CircularProgressIndicator(color: kPrimaryColor)
-                    : ElevatedButton(
-                        onPressed: _submit,
-                        child: Text(_mode == AuthMode.login ? 'Login' : 'Sign Up'),
-                      ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: isLoading
-                      ? null
-                      : () {
-                          setState(() {
-                            _mode = _mode == AuthMode.login ? AuthMode.signup : AuthMode.login;
-                          });
-                        },
-                  child: Text(_mode == AuthMode.login
-                      ? "Don't have an account? Sign Up"
-                      : "Already have an account? Sign In"),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -215,6 +194,86 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
+// Signup Screen
+class SignupScreen extends StatefulWidget {
+  const SignupScreen({super.key});
+
+  @override
+  State<SignupScreen> createState() => _SignupScreenState();
+}
+
+class _SignupScreenState extends State<SignupScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final auth = context.read<AuthProvider>();
+    final err = await auth.signup(_email.text.trim(), _password.text);
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+    } else {
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loading = context.watch<AuthProvider>().loading;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create Account')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _email,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    validator: Validators.email,
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _password,
+                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: true,
+                    validator: Validators.password,
+                    onFieldSubmitted: (_) => _submit(),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: loading ? null : _submit,
+                      child: Text(loading ? 'Creating…' : 'Sign Up'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Home Scaffold
 class HomeScaffold extends StatefulWidget {
   const HomeScaffold({super.key});
 
@@ -223,67 +282,179 @@ class HomeScaffold extends StatefulWidget {
 }
 
 class _HomeScaffoldState extends State<HomeScaffold> {
-  int _tabIndex = 0;
+  int _index = 0;
 
   @override
   Widget build(BuildContext context) {
+    final email = context.watch<AuthProvider>().email ?? 'unknown';
+    
+    final tabs = <Widget>[
+      const _CenterText('Home'),
+      const _CenterText('Closet'),
+      const _CenterText('Competitions'),
+      _ProfileTab(email: email),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('7ftrends'),
         actions: [
           IconButton(
+            onPressed: () => context.read<AuthProvider>().logout(),
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
-            onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout();
-            },
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _tabIndex,
-        children: const [
-          FeedTab(),
-          ClosetTab(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _tabIndex,
-        selectedItemColor: kPrimaryColor,
-        unselectedItemColor: Colors.grey,
-        onTap: (index) => setState(() => _tabIndex = index),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.rss_feed), label: 'Feed'),
-          BottomNavigationBarItem(icon: Icon(Icons.checkroom), label: 'Closet'),
+      body: tabs[_index],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.checkroom_outlined), label: 'Closet'),
+          NavigationDestination(icon: Icon(Icons.emoji_events_outlined), label: 'Compete'),
+          NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
         ],
       ),
     );
   }
 }
 
-class FeedTab extends StatelessWidget {
-  const FeedTab({super.key});
+class _CenterText extends StatelessWidget {
+  final String text;
+  const _CenterText(this.text);
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Feed Tab'));
+    return Center(
+      child: Text(text, style: const TextStyle(fontSize: 20)),
+    );
   }
 }
 
-class ClosetTab extends StatelessWidget {
-  const ClosetTab({super.key});
+class _ProfileTab extends StatelessWidget {
+  final String email;
+  const _ProfileTab({required this.email});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Closet Tab'));
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.person, size: 80, color: Color(0xFF8B5CF6)),
+          const SizedBox(height: 16),
+          Text('Logged in as:', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+          const SizedBox(height: 8),
+          Text(email, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
   }
 }
 
-String? validateUsername(String? value, {Set<String>? takenUsernames}) {
-  if (value == null || value.trim().isEmpty) return 'Username required';
-  final v = value.trim();
-  if (v.length < 3 || v.length > 20) return '3-20 characters';
-  if (!RegExp(r'^[a-z0-9_]+$').hasMatch(v)) return 'Lowercase, numbers, _ only';
-  if (takenUsernames != null && takenUsernames.contains(v)) return 'Username taken';
-  return null;
+// Router
+GoRouter createRouter(AuthProvider auth) {
+  return GoRouter(
+    initialLocation: '/',
+    refreshListenable: auth,
+    redirect: (context, state) {
+      final isLoggedIn = auth.isLoggedIn;
+      final isLoading = auth.loading;
+      final isGoingToLogin = state.matchedLocation == '/login';
+      final isGoingToSignup = state.matchedLocation == '/signup';
+      final isGoingToForgot = state.matchedLocation == '/forgot-password';
+
+      if (isLoading) return null;
+
+      if (!isLoggedIn && !isGoingToLogin && !isGoingToSignup && !isGoingToForgot) {
+        return '/login';
+      }
+
+      if (isLoggedIn && (isGoingToLogin || isGoingToSignup || isGoingToForgot)) {
+        return '/';
+      }
+
+      return null;
+    },
+    routes: [
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/signup',
+        builder: (context, state) => const SignupScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => Scaffold(
+          appBar: AppBar(title: const Text('Forgot Password')),
+          body: const Center(child: Text('Mock mode: use Sign Up or Log In.')),
+        ),
+      ),
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const HomeScaffold(),
+      ),
+    ],
+  );
+}
+
+// Main App
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final sessionService = LocalSessionService();
+  final authProvider = AuthProvider(sessionService);
+  
+  await authProvider.restore();
+
+  runApp(SevenFTrendsApp(authProvider: authProvider));
+}
+
+class SevenFTrendsApp extends StatelessWidget {
+  final AuthProvider authProvider;
+  
+  const SevenFTrendsApp({super.key, required this.authProvider});
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: authProvider,
+      child: Consumer<AuthProvider>(
+        builder: (context, auth, _) {
+          final router = createRouter(auth);
+          
+          return MaterialApp.router(
+            title: '7ftrends',
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              primarySwatch: Colors.purple,
+              primaryColor: const Color(0xFF8B5CF6),
+              textTheme: GoogleFonts.poppinsTextTheme(),
+              visualDensity: VisualDensity.adaptivePlatformDensity,
+              appBarTheme: const AppBarTheme(
+                backgroundColor: Color(0xFF8B5CF6),
+                foregroundColor: Colors.white,
+                elevation: 0,
+              ),
+              elevatedButtonTheme: ElevatedButtonThemeData(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF8B5CF6),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            routerConfig: router,
+          );
+        },
+      ),
+    );
+  }
 }
